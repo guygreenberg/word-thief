@@ -1,0 +1,8 @@
+# One-click deploy on Render: New + > Blueprint > pick this repo.
+services:
+  - type: web
+    name: word-thief
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    numInstances: 1 # game state lives in memory, so keep a single instance
