@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { CAPTURE_CODE_LENGTH, GameError, GameStore, MAX_PLAYERS, MAX_WRONG_CODES_PER_MINUTE } from './game.js';
+import { AVATARS, CAPTURE_CODE_LENGTH, GameError, GameStore, MAX_PLAYERS, MAX_WRONG_CODES_PER_MINUTE } from './game.js';
+import { AVATAR_CHOICES } from '../client/src/constants.js';
 import { ALL_WORDS } from './words.js';
 
 function setup(names = ['Alice', 'Bob', 'Carol']) {
@@ -216,17 +217,38 @@ describe('rejoining', () => {
 describe('renaming', () => {
   it('changes the name, keeps it unique, and lets the player rejoin with the new name', () => {
     const { store, game, players } = setup();
-    store.renamePlayer(game.id, players.Alice.token, 'Ali');
+    store.updateProfile(game.id, players.Alice.token, { name: 'Ali' });
     assert.equal(players.Alice.name, 'Ali');
     assert.deepEqual(
       (({ type, from }) => ({ type, from }))(game.events.at(-1)),
       { type: 'rename', from: 'Alice' },
     );
-    assert.throws(() => store.renamePlayer(game.id, players.Alice.token, 'bob'), /already taken/);
-    assert.throws(() => store.renamePlayer(game.id, 'bad-token', 'X'), /not a player/);
+    assert.throws(() => store.updateProfile(game.id, players.Alice.token, { name: 'bob' }), /already taken/);
+    assert.throws(() => store.updateProfile(game.id, 'bad-token', { name: 'X' }), /not a player/);
     assert.equal(store.rejoinGame(game.id, 'ali').player.id, players.Alice.id);
     // Renaming to a different casing of your own name is allowed.
-    store.renamePlayer(game.id, players.Alice.token, 'ALI');
+    store.updateProfile(game.id, players.Alice.token, { name: 'ALI' });
     assert.equal(players.Alice.name, 'ALI');
+  });
+});
+
+describe('changing avatar', () => {
+  it('accepts only avatars from the list, alone or together with a new name', () => {
+    const { store, game, players } = setup();
+    const next = AVATARS.find((a) => a !== players.Alice.avatar);
+    store.updateProfile(game.id, players.Alice.token, { avatar: next });
+    assert.equal(players.Alice.avatar, next);
+    assert.notEqual(game.events.at(-1).type, 'rename');
+
+    assert.throws(() => store.updateProfile(game.id, players.Alice.token, { name: 'Ali', avatar: '💩<script>' }), /pick one of the avatars/);
+    // Nothing changes when any part is invalid.
+    assert.equal(players.Alice.name, 'Alice');
+
+    store.updateProfile(game.id, players.Alice.token, { name: 'Ali', avatar: AVATARS[0] });
+    assert.deepEqual([players.Alice.name, players.Alice.avatar], ['Ali', AVATARS[0]]);
+  });
+
+  it('offers players exactly the avatars the server accepts', () => {
+    assert.deepEqual(AVATAR_CHOICES, AVATARS);
   });
 });

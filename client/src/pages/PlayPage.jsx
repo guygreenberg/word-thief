@@ -11,7 +11,7 @@ import {
   Scanner,
   useToast,
 } from '../components/ui.jsx';
-import { CAPTURE_CODE_LENGTH, MAX_NAME_LENGTH } from '../constants.js';
+import { AVATAR_CHOICES, CAPTURE_CODE_LENGTH, MAX_NAME_LENGTH } from '../constants.js';
 import { celebrate, play, vibrate } from '../effects.js';
 import { plural, useChange, useSocketEvent } from '../hooks.js';
 import { parsePlayerQr, playerQrValue } from '../links.js';
@@ -174,7 +174,7 @@ function PlayerGame({ id, token }) {
         <CaughtView me={me} capturer={capturer} state={state} />
       ) : (
         <>
-          <MeCard id={id} token={token} me={me} onRenamed={setMe} />
+          <MeCard id={id} token={token} me={me} onUpdated={setMe} />
 
           <WordVault word={me.word} />
 
@@ -254,20 +254,27 @@ function PlayerGame({ id, token }) {
   );
 }
 
-function MeCard({ id, token, me, onRenamed }) {
+function MeCard({ id, token, me, onUpdated }) {
   const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(me.name);
+  const [avatar, setAvatar] = useState(me.avatar);
   const [saving, setSaving] = useState(false);
+
+  function startEditing() {
+    setName(me.name);
+    setAvatar(me.avatar);
+    setEditing(true);
+  }
 
   async function save(e) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await request('player:rename', { gameId: id, token, name });
-      onRenamed(res.me);
+      const res = await request('player:update', { gameId: id, token, name, avatar });
+      onUpdated(res.me);
       setEditing(false);
-      toast({ emoji: '✏️', text: `You're now ${res.me.name}`, tone: 'success' });
+      toast({ emoji: res.me.avatar, text: `Looking good, ${res.me.name}!`, tone: 'success' });
     } catch (err) {
       play('error');
       toast({ emoji: '🙅', text: err.message, tone: 'error' });
@@ -276,56 +283,68 @@ function MeCard({ id, token, me, onRenamed }) {
     }
   }
 
-  return (
-    <section className="card me-card pop-in" style={{ '--c': me.color }}>
-      <Avatar player={me} size={72} />
-      {editing ? (
-        <form className="rename-form" onSubmit={save}>
-          <input
-            className="input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={MAX_NAME_LENGTH}
-            aria-label="New name"
-            autoFocus
-            required
-          />
+  if (editing) {
+    return (
+      <section className="card me-card me-card-editing pop-in" style={{ '--c': me.color }}>
+        <form className="profile-form" onSubmit={save}>
+          <div className="profile-row">
+            <Avatar player={{ ...me, avatar }} size={72} />
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={MAX_NAME_LENGTH}
+              aria-label="Your name"
+              required
+            />
+          </div>
+          <p className="label">Pick your avatar</p>
+          <div className="avatar-picker" role="radiogroup" aria-label="Avatar">
+            {AVATAR_CHOICES.map((a) => (
+              <button
+                key={a}
+                type="button"
+                role="radio"
+                aria-checked={a === avatar}
+                aria-label={`Avatar ${a}`}
+                className={`avatar-choice ${a === avatar ? 'avatar-choice-on' : ''}`}
+                onClick={() => setAvatar(a)}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
           <div className="row">
-            <button type="submit" className="btn btn-sm btn-green" disabled={saving || !name.trim()}>
-              Save
+            <button type="submit" className="btn btn-green" disabled={saving || !name.trim()}>
+              {saving ? 'Saving…' : 'Save'}
             </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost"
-              onClick={() => {
-                setName(me.name);
-                setEditing(false);
-              }}
-            >
+            <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
               Cancel
             </button>
           </div>
         </form>
-      ) : (
-        <div className="me-info">
-          <h2>
-            {me.name}
-            <button
-              type="button"
-              className="icon-btn icon-btn-sm"
-              aria-label="Change your name"
-              title="Change your name"
-              onClick={() => {
-                setName(me.name);
-                setEditing(true);
-              }}
-            >
-              ✏️
-            </button>
-          </h2>
-          <span className="pill pill-dark">🦹 {plural(me.wordCount - 1, 'word')} stolen</span>
-        </div>
-      )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="card me-card pop-in" style={{ '--c': me.color }}>
+      <Avatar player={me} size={72} />
+      <div className="me-info">
+        <h2>
+          {me.name}
+          <button
+            type="button"
+            className="icon-btn icon-btn-sm"
+            aria-label="Change your name and avatar"
+            title="Change your name and avatar"
+            onClick={startEditing}
+          >
+            ✏️
+          </button>
+        </h2>
+        <span className="pill pill-dark">🦹 {plural(me.wordCount - 1, 'word')} stolen</span>
+      </div>
     </section>
   );
 }

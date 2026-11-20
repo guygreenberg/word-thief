@@ -27,7 +27,7 @@ The host can **undo the last steal** (for disputes or mis-scans) and remove play
 
 Names are unique within a game (case-insensitive). A player who closes the browser or switches phones
 scans the game QR again and types their original name to get back in, even after the game started.
-Players can rename themselves at any time with the ✏️ button.
+Players can change their name and pick a different avatar at any time with the ✏️ button.
 
 ## Tech
 

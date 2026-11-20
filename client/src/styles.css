@@ -1333,11 +1333,44 @@ a {
   font-size: 0.9rem;
   flex: none;
 }
-.rename-form {
+.profile-form {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+}
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.profile-form .label {
+  margin: 4px 0 0;
+}
+.avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+}
+.avatar-choice {
+  aspect-ratio: 1;
+  font-size: 1.6rem;
+  line-height: 1;
+  border: 2px solid #e6e0f5;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.avatar-choice:hover {
+  transform: scale(1.1);
+}
+.avatar-choice-on {
+  border: var(--border);
+  background: var(--c, var(--yellow));
+  box-shadow: var(--shadow-sm);
+  transform: scale(1.08);
 }
 
 .stack {

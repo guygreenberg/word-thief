@@ -124,8 +124,8 @@ export function registerSocketHandlers(io, store, auth) {
       return { token: player.token, me: store.playerState(player), state: store.publicState(game) };
     });
 
-    handle('player:rename', ({ gameId, token, name }) => {
-      const { game, player } = store.renamePlayer(gameId, token, name);
+    handle('player:update', ({ gameId, token, name, avatar }) => {
+      const { game, player } = store.updateProfile(gameId, token, { name, avatar });
       broadcast(game);
       sendMe(game, player);
       return { me: store.playerState(player) };

@@ -14,7 +14,7 @@ const SAVE_DELAY_MS = 200;
 const SAVE_RETRY_MS = 5000;
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const AVATARS = [
+export const AVATARS = [
   '🦊', '🐸', '🐼', '🐨', '🦁', '🐯', '🐵', '🐙', '🦄', '🐧', '🐢', '🦖', '🐳', '🦉', '🐝', '🦩',
   '🐷', '🐮', '🐰', '🐹', '🦝', '🦦', '🦥', '🐲', '👽', '🤖', '👻', '🎃', '🦀', '🐞', '🦔', '🐊',
 ];
@@ -202,16 +202,24 @@ export class GameStore {
     return { game, player };
   }
 
-  renamePlayer(gameId, token, rawName) {
+  /** Lets a player change their name and/or avatar. Both are validated before anything changes. */
+  updateProfile(gameId, token, { name: rawName, avatar } = {}) {
     const game = this.getGame(gameId);
     const player = this.findPlayerByToken(game, token);
-    const name = normalizeName(rawName);
-    if (name === player.name) return { game, player };
+    const name = rawName === undefined ? player.name : normalizeName(rawName);
     const other = this.findPlayerByName(game, name);
     if (other && other.id !== player.id) throw new GameError(`"${name}" is already taken. Try another name!`);
-    const from = player.name;
-    player.name = name;
-    this.#log(game, { type: 'rename', player: player.id, from });
+    if (avatar !== undefined && !AVATARS.includes(avatar)) throw new GameError('Please pick one of the avatars');
+
+    if (avatar !== undefined && avatar !== player.avatar) {
+      player.avatar = avatar;
+      this.#touch(game);
+    }
+    if (name !== player.name) {
+      const from = player.name;
+      player.name = name;
+      this.#log(game, { type: 'rename', player: player.id, from });
+    }
     return { game, player };
   }
 
