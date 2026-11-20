@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { GameError, GameStore, MAX_PLAYERS } from './game.js';
+import { CAPTURE_CODE_LENGTH, GameError, GameStore, MAX_PLAYERS, MAX_WRONG_CODES_PER_MINUTE } from './game.js';
 import { ALL_WORDS } from './words.js';
 
 function setup(names = ['Alice', 'Bob', 'Carol']) {
@@ -27,7 +27,7 @@ describe('joining', () => {
 
   it('rejects duplicate (case-insensitive) and empty names', () => {
     const { store, game } = setup();
-    assert.throws(() => store.joinGame(game.id, '  alice '), GameError);
+    assert.throws(() => store.joinGame(game.id, '  alice '), (e) => e instanceof GameError && e.code === 'NAME_TAKEN');
     assert.throws(() => store.joinGame(game.id, '   '), GameError);
   });
 
@@ -74,10 +74,10 @@ describe('capturing', () => {
     assert.throws(() => store.capture(game.id, Alice.token, Bob.code), /hasn't started/);
     store.startGame(game.id, game.adminKey);
     assert.throws(() => store.capture(game.id, Alice.token, Alice.code), /your own code/);
-    assert.throws(() => store.capture(game.id, Alice.token, 'nope'), /isn't a player/);
+    assert.throws(() => store.capture(game.id, Alice.token, 'nope'), /doesn't match/);
     assert.throws(() => store.capture(game.id, 'bad-token', Bob.code), /not a player/);
     // Player ids are public on the board, so they must not work as capture codes.
-    assert.throws(() => store.capture(game.id, Alice.token, Bob.id), /isn't a player/);
+    assert.throws(() => store.capture(game.id, Alice.token, Bob.id), /doesn't match/);
     store.capture(game.id, Alice.token, Bob.code);
     assert.throws(() => store.capture(game.id, Carol.token, Bob.code), /already out/);
     assert.throws(() => store.capture(game.id, Bob.token, Carol.code), /You're out/);
@@ -138,5 +138,72 @@ describe('public state', () => {
     store.capture(game.id, players.Alice.token, players.Carol.code);
     const winner = store.publicState(game).players.find((p) => p.id === players.Alice.id);
     assert.equal(winner.words.length, 3);
+  });
+});
+
+describe('short capture codes', () => {
+  it('gives each player a unique short code that works in any case, with spaces or dashes', () => {
+    const { store, game, players } = setup(['A', 'B', 'C', 'D', 'E']);
+    const codes = Object.values(players).map((p) => p.code);
+    assert.equal(new Set(codes).size, codes.length);
+    for (const code of codes) assert.match(code, new RegExp(`^[A-Z0-9]{${CAPTURE_CODE_LENGTH}}$`));
+
+    store.startGame(game.id, game.adminKey);
+    const typed = ` ${players.B.code.slice(0, 3).toLowerCase()}-${players.B.code.slice(3)} `;
+    store.capture(game.id, players.A.token, typed);
+    assert.equal(players.B.status, 'out');
+  });
+
+  it('blocks a player after too many wrong codes, even if the next code is right', () => {
+    let now = 1_000_000;
+    const store = new GameStore({ now: () => now });
+    const game = store.createGame();
+    const [a, b] = ['A', 'B', 'C'].map((n) => store.joinGame(game.id, n).player);
+    store.startGame(game.id, game.adminKey);
+    for (let i = 0; i < MAX_WRONG_CODES_PER_MINUTE; i++) {
+      assert.throws(() => store.capture(game.id, a.token, 'ZZZZZZ'), /doesn't match/);
+    }
+    assert.throws(() => store.capture(game.id, a.token, b.code), /Too many wrong codes/);
+    now += 61_000;
+    store.capture(game.id, a.token, b.code);
+    assert.equal(b.status, 'out');
+  });
+});
+
+describe('rejoining', () => {
+  it('returns the same player (and session token) for their original name, also after the game started', () => {
+    const { store, game, players } = setup();
+    store.startGame(game.id, game.adminKey);
+    store.capture(game.id, players.Alice.token, players.Bob.code);
+    const { player } = store.rejoinGame(game.id, '  ALICE ');
+    assert.equal(player.id, players.Alice.id);
+    assert.equal(player.token, players.Alice.token);
+    assert.equal(player.words.length, 2);
+    assert.equal(game.events.at(-1).type, 'rejoin');
+  });
+
+  it('rejects unknown names and still blocks new players after the start', () => {
+    const { store, game } = setup();
+    store.startGame(game.id, game.adminKey);
+    assert.throws(() => store.rejoinGame(game.id, 'Zed'), /no player called "Zed"/);
+    assert.throws(() => store.joinGame(game.id, 'Zed'), /already started/);
+  });
+});
+
+describe('renaming', () => {
+  it('changes the name, keeps it unique, and lets the player rejoin with the new name', () => {
+    const { store, game, players } = setup();
+    store.renamePlayer(game.id, players.Alice.token, 'Ali');
+    assert.equal(players.Alice.name, 'Ali');
+    assert.deepEqual(
+      (({ type, from }) => ({ type, from }))(game.events.at(-1)),
+      { type: 'rename', from: 'Alice' },
+    );
+    assert.throws(() => store.renamePlayer(game.id, players.Alice.token, 'bob'), /already taken/);
+    assert.throws(() => store.renamePlayer(game.id, 'bad-token', 'X'), /not a player/);
+    assert.equal(store.rejoinGame(game.id, 'ali').player.id, players.Alice.id);
+    // Renaming to a different casing of your own name is allowed.
+    store.renamePlayer(game.id, players.Alice.token, 'ALI');
+    assert.equal(players.Alice.name, 'ALI');
   });
 });

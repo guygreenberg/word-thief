@@ -8,7 +8,8 @@ import { storage } from '../storage.js';
 const STEPS = [
   ['📱', 'Scan & join', 'Scan the QR on the big screen, type your name and get a secret word.'],
   ['🗣️', 'Make them say it', "Chat, trick and tease other players until they say YOUR word out loud."],
-  ['📷', 'Scan & steal', 'Got them? Scan their QR. All their words become yours and they are out!'],
+  ['🤫', 'Tell them secretly', 'When they say your word, whisper it to them or pull them aside, so nobody else finds out your word.'],
+  ['📷', 'Scan & steal', 'They show you their QR (or code). Scan it and all their words become yours. They are out!'],
   ['🏆', 'Last thief wins', 'Keep stealing until you hold every single word in the game.'],
 ];
 

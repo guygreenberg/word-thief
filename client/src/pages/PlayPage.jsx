@@ -11,6 +11,7 @@ import {
   Scanner,
   useToast,
 } from '../components/ui.jsx';
+import { CAPTURE_CODE_LENGTH, MAX_NAME_LENGTH } from '../constants.js';
 import { celebrate, play, vibrate } from '../effects.js';
 import { plural, useChange, useSocketEvent } from '../hooks.js';
 import { parsePlayerQr, playerQrValue } from '../links.js';
@@ -114,11 +115,12 @@ function PlayerGame({ id, token }) {
     celebrate();
   }
 
-  async function onScan(data) {
-    setScanning(false);
+  /** A failed camera scan closes the panel; a mistyped code keeps it open so it can be fixed. */
+  async function steal(getCode, { keepOpenOnError = false } = {}) {
+    if (!keepOpenOnError) setScanning(false);
     try {
-      const code = parsePlayerQr(data, id);
-      const res = await request('player:capture', { gameId: id, token, code });
+      const res = await request('player:capture', { gameId: id, token, code: getCode() });
+      setScanning(false);
       setMe(res.me);
       showSteal({ words: res.stolen, target: res.target });
     } catch (e) {
@@ -172,13 +174,7 @@ function PlayerGame({ id, token }) {
         <CaughtView me={me} capturer={capturer} state={state} />
       ) : (
         <>
-          <section className="card me-card pop-in" style={{ '--c': me.color }}>
-            <Avatar player={me} size={72} />
-            <div>
-              <h2>{me.name}</h2>
-              <span className="pill pill-dark">{plural(me.words.length, 'word')}</span>
-            </div>
-          </section>
+          <MeCard id={id} token={token} me={me} onRenamed={setMe} />
 
           <WordVault words={me.words} />
 
@@ -189,20 +185,22 @@ function PlayerGame({ id, token }) {
               <ul className="rules">
                 <li>🤫 Never say your own word.</li>
                 <li>🗣️ Get others to say <b>your</b> word out loud.</li>
-                <li>📷 When they do, scan their QR and steal all their words.</li>
-                <li>😱 If you say someone's word, show them your QR. You're out!</li>
+                <li>🤐 When someone says it, tell them <b>secretly</b>: whisper or take them aside, so nobody else learns your word.</li>
+                <li>📷 They show you their QR or code. Scan it (or type the code) to steal all their words.</li>
+                <li>😱 If someone secretly tells you that you said their word, show them your QR. You're out!</li>
               </ul>
             </section>
           ) : (
             <>
+              <p className="whisper-hint">🤫 Got someone? Tell them <b>secretly</b> before you steal!</p>
               <section className="action-buttons">
                 <button type="button" className="btn btn-green btn-xl" onClick={() => setScanning(true)}>
                   📷 They said my word!
-                  <small>Scan their QR to steal</small>
+                  <small>Scan their QR or type their code</small>
                 </button>
                 <button type="button" className="btn btn-pink btn-xl" onClick={() => setShowQr(true)}>
                   😱 I said their word…
-                  <small>Show my QR code</small>
+                  <small>Show my QR and code</small>
                 </button>
               </section>
               <section className="card">
@@ -216,8 +214,11 @@ function PlayerGame({ id, token }) {
 
       {scanning && (
         <Modal onClose={() => setScanning(false)}>
-          <h2>Scan to steal 📷</h2>
-          <Scanner onResult={onScan} onCancel={() => setScanning(false)} />
+          <StealPanel
+            onScan={(data) => steal(() => parsePlayerQr(data, id))}
+            onCode={(code) => steal(() => code, { keepOpenOnError: true })}
+            onCancel={() => setScanning(false)}
+          />
         </Modal>
       )}
       {showQr && (
@@ -225,6 +226,10 @@ function PlayerGame({ id, token }) {
           <h2>Busted? 😅</h2>
           <p className="muted">Let the thief scan this. Your words go to them.</p>
           <QR value={playerQrValue(id, me.code)} size={Math.min(window.innerWidth - 100, 300)} label={`${me.avatar} ${me.name}`} />
+          <p className="muted small">Camera not working? Show them this code (don't say it out loud!):</p>
+          <p className="capture-code" aria-label="Your capture code">
+            {me.code}
+          </p>
         </Modal>
       )}
       {stolen && (
@@ -249,6 +254,127 @@ function PlayerGame({ id, token }) {
   );
 }
 
+function MeCard({ id, token, me, onRenamed }) {
+  const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(me.name);
+  const [saving, setSaving] = useState(false);
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await request('player:rename', { gameId: id, token, name });
+      onRenamed(res.me);
+      setEditing(false);
+      toast({ emoji: '✏️', text: `You're now ${res.me.name}`, tone: 'success' });
+    } catch (err) {
+      play('error');
+      toast({ emoji: '🙅', text: err.message, tone: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card me-card pop-in" style={{ '--c': me.color }}>
+      <Avatar player={me} size={72} />
+      {editing ? (
+        <form className="rename-form" onSubmit={save}>
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={MAX_NAME_LENGTH}
+            aria-label="New name"
+            autoFocus
+            required
+          />
+          <div className="row">
+            <button type="submit" className="btn btn-sm btn-green" disabled={saving || !name.trim()}>
+              Save
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                setName(me.name);
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="me-info">
+          <h2>
+            {me.name}
+            <button
+              type="button"
+              className="icon-btn icon-btn-sm"
+              aria-label="Change your name"
+              title="Change your name"
+              onClick={() => {
+                setName(me.name);
+                setEditing(true);
+              }}
+            >
+              ✏️
+            </button>
+          </h2>
+          <span className="pill pill-dark">{plural(me.words.length, 'word')}</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StealPanel({ onScan, onCode, onCancel }) {
+  const [mode, setMode] = useState('scan');
+  const [code, setCode] = useState('');
+  return (
+    <>
+      <h2>Steal their words 🦹</h2>
+      <div className="tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={mode === 'scan'} className={mode === 'scan' ? 'tab-on' : ''} onClick={() => setMode('scan')}>
+          📷 Scan QR
+        </button>
+        <button type="button" role="tab" aria-selected={mode === 'type'} className={mode === 'type' ? 'tab-on' : ''} onClick={() => setMode('type')}>
+          ⌨️ Type code
+        </button>
+      </div>
+      {mode === 'scan' ? (
+        <Scanner onResult={onScan} onCancel={onCancel} />
+      ) : (
+        <form
+          className="type-code"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onCode(code);
+          }}
+        >
+          <p className="muted">Type the code shown under their QR</p>
+          <input
+            className="input input-lg code-input"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="ABC123"
+            maxLength={8}
+            autoCapitalize="characters"
+            autoComplete="off"
+            autoFocus
+            aria-label="Player code"
+          />
+          <button type="submit" className="btn btn-green btn-lg btn-block" disabled={code.replace(/[^A-Za-z0-9]/g, '').length < CAPTURE_CODE_LENGTH}>
+            🦹 Steal!
+          </button>
+        </form>
+      )}
+    </>
+  );
+}
+
 function WordVault({ words }) {
   const [revealed, setRevealed] = useState(false);
   return (
@@ -264,7 +390,7 @@ function WordVault({ words }) {
           <span key={w} className="word-chip">{revealed ? w : '•'.repeat(Math.min(w.length, 8))}</span>
         ))}
       </div>
-      <p className="muted small">Make anyone say <b>any</b> of these, then scan their QR!</p>
+      <p className="muted small">Make anyone say <b>any</b> of these, tell them secretly, then scan their QR or type their code!</p>
     </section>
   );
 }

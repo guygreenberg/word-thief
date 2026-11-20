@@ -6,7 +6,7 @@ export function request(event, payload = {}) {
   return new Promise((resolve, reject) => {
     socket.timeout(10_000).emit(event, payload, (err, res) => {
       if (err) return reject(new Error('Connection problem. Please try again.'));
-      if (!res.ok) return reject(new Error(res.error));
+      if (!res.ok) return reject(Object.assign(new Error(res.error), { code: res.errorCode }));
       resolve(res);
     });
   });

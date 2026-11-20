@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { onMuteChange, isMuted } from './effects.js';
 import { onEveryConnect, request, socket } from './socket.js';
+import { storage } from './storage.js';
 
 export function useSocketEvent(event, handler) {
   const ref = useRef(handler);
@@ -32,6 +33,19 @@ export function useGameWatch(gameId, adminKey) {
     [id, adminKey],
   );
   return { state, error };
+}
+
+/** Admin key from the `#key=` link fragment (saved for later) or from this device's storage. */
+export function useAdminKey(gameId) {
+  const [adminKey] = useState(() => {
+    const fromHash = new URLSearchParams(window.location.hash.slice(1)).get('key');
+    if (fromHash) {
+      storage.setAdminKey(gameId, fromHash);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    return fromHash || storage.getAdminKey(gameId);
+  });
+  return adminKey;
 }
 
 export function useConnected() {

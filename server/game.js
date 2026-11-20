@@ -4,6 +4,9 @@ import { ALL_WORDS } from './words.js';
 export const MIN_PLAYERS = 3;
 export const MAX_PLAYERS = 300;
 export const MAX_NAME_LENGTH = 20;
+export const CAPTURE_CODE_LENGTH = 6;
+// Short typed capture codes are guessable in theory, so wrong guesses are rate limited per player.
+export const MAX_WRONG_CODES_PER_MINUTE = 8;
 const MAX_EVENTS = 50;
 const GAME_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -14,12 +17,21 @@ const AVATARS = [
 ];
 const COLORS = ['#FF5FA2', '#FFD23F', '#3DDC97', '#4CC9F0', '#B388FF', '#FF8C42', '#7AE582', '#FF6B6B'];
 
-export class GameError extends Error {}
+export class GameError extends Error {
+  constructor(message, code) {
+    super(message);
+    this.code = code;
+  }
+}
 
 const randomCode = (length) =>
   Array.from({ length }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
 const secret = () => randomBytes(16).toString('base64url');
 const pick = (list) => list[randomInt(list.length)];
+const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();
+
+/** Capture codes are typed by hand, so accept any case, spaces and dashes. */
+export const normalizeCode = (raw) => String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 function shuffle(list) {
   const copy = [...list];
@@ -84,20 +96,31 @@ export class GameStore {
     throw new GameError("You're not a player in this game");
   }
 
+  findPlayerByName(game, name) {
+    return [...game.players.values()].find((p) => sameName(p.name, name));
+  }
+
   joinGame(gameId, rawName) {
     const game = this.getGame(gameId);
-    if (game.status !== 'lobby') throw new GameError('This game has already started. Ask the host for a new one!');
-    if (game.players.size >= MAX_PLAYERS) throw new GameError(`This game is full (${MAX_PLAYERS} players)`);
     const name = normalizeName(rawName);
-    const taken = [...game.players.values()].some((p) => p.name.toLowerCase() === name.toLowerCase());
-    if (taken) throw new GameError(`"${name}" is already taken. Try another name!`);
+    if (this.findPlayerByName(game, name)) {
+      throw new GameError(`"${name}" is already in this game. Is that you?`, 'NAME_TAKEN');
+    }
+    if (game.status !== 'lobby') {
+      throw new GameError('This game has already started. If you were playing, type your original name to rejoin.');
+    }
+    if (game.players.size >= MAX_PLAYERS) throw new GameError(`This game is full (${MAX_PLAYERS} players)`);
 
     let id;
     do id = randomCode(8); while (game.players.has(id));
+    const codes = new Set([...game.players.values()].map((p) => p.code));
+    let code;
+    do code = randomCode(CAPTURE_CODE_LENGTH); while (codes.has(code));
     const player = {
       id,
       token: secret(),
-      code: secret(),
+      code,
+      wrongCodes: [],
       name,
       avatar: pick(AVATARS),
       color: pick(COLORS),
@@ -109,6 +132,29 @@ export class GameStore {
     };
     game.players.set(id, player);
     this.#log(game, { type: 'join', player: id });
+    return { game, player };
+  }
+
+  /** Lets a player who lost their session (closed browser, new phone) continue by typing their original name. */
+  rejoinGame(gameId, rawName) {
+    const game = this.getGame(gameId);
+    const name = normalizeName(rawName);
+    const player = this.findPlayerByName(game, name);
+    if (!player) throw new GameError(`There's no player called "${name}" in this game`);
+    this.#log(game, { type: 'rejoin', player: player.id });
+    return { game, player };
+  }
+
+  renamePlayer(gameId, token, rawName) {
+    const game = this.getGame(gameId);
+    const player = this.findPlayerByToken(game, token);
+    const name = normalizeName(rawName);
+    if (name === player.name) return { game, player };
+    const other = this.findPlayerByName(game, name);
+    if (other && other.id !== player.id) throw new GameError(`"${name}" is already taken. Try another name!`);
+    const from = player.name;
+    player.name = name;
+    this.#log(game, { type: 'rename', player: player.id, from });
     return { game, player };
   }
 
@@ -139,8 +185,17 @@ export class GameStore {
     if (game.status === 'finished') throw new GameError('The game is over!');
     const hunter = this.findPlayerByToken(game, hunterToken);
     if (hunter.status !== 'active') throw new GameError("You're out of the game. No more stealing! 👻");
-    const target = [...game.players.values()].find((p) => p.code === targetCode);
-    if (!target) throw new GameError("That QR code isn't a player in this game");
+    const cutoff = this.now() - 60_000;
+    hunter.wrongCodes = hunter.wrongCodes.filter((t) => t > cutoff);
+    if (hunter.wrongCodes.length >= MAX_WRONG_CODES_PER_MINUTE) {
+      throw new GameError('Too many wrong codes. Wait a minute and try again ⏳');
+    }
+    const code = normalizeCode(targetCode);
+    const target = code && [...game.players.values()].find((p) => p.code === code);
+    if (!target) {
+      hunter.wrongCodes.push(this.now());
+      throw new GameError("That code doesn't match any player in this game");
+    }
     if (target.id === hunter.id) throw new GameError("That's your own code, silly! 🙃");
     if (target.status !== 'active') throw new GameError(`${target.name} is already out of the game`);
 

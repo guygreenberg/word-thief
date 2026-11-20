@@ -14,22 +14,9 @@ import {
   useToast,
 } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
-import { plural, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
-import { adminUrl, boardPath, joinUrl } from '../links.js';
+import { plural, useAdminKey, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
+import { adminBoardPath, adminUrl, boardPath, joinUrl } from '../links.js';
 import { request } from '../socket.js';
-import { storage } from '../storage.js';
-
-function useAdminKey(gameId) {
-  const [adminKey] = useState(() => {
-    const fromHash = new URLSearchParams(window.location.hash.slice(1)).get('key');
-    if (fromHash) {
-      storage.setAdminKey(gameId, fromHash);
-      window.history.replaceState(null, '', window.location.pathname);
-    }
-    return fromHash || storage.getAdminKey(gameId);
-  });
-  return adminKey;
-}
 
 export default function AdminPage() {
   const id = useParams().gameId.toUpperCase();
@@ -126,6 +113,9 @@ function AdminDashboard({ id, adminKey }) {
         )}
         <a className="btn btn-blue" href={boardPath(id)} target="_blank" rel="noreferrer">
           📺 Present board
+        </a>
+        <a className="btn btn-yellow" href={adminBoardPath(id)} target="_blank" rel="noreferrer" title="Word counts, for the host only">
+          📊 Score board (host only)
         </a>
         {state.canUndo && (
           <button

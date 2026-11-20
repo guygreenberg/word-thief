@@ -95,12 +95,12 @@ export function StatusPill({ status }) {
   );
 }
 
-export function Leaderboard({ players, highlightId, limit, showWords = false }) {
+export function Leaderboard({ players, highlightId, limit, showWords = false, columns = false }) {
   const ranked = rankPlayers(players);
   const shown = limit ? ranked.slice(0, limit) : ranked;
   const max = Math.max(1, ...players.map((p) => p.wordCount));
   return (
-    <ol className="leaderboard">
+    <ol className={`leaderboard ${columns ? 'leaderboard-cols' : ''}`}>
       {shown.map((p, i) => {
         const out = p.status === 'out';
         return (
@@ -149,6 +149,10 @@ function EventText({ event: e }) {
   switch (e.type) {
     case 'join':
       return <span>👋 <b>{e.player}</b> joined</span>;
+    case 'rejoin':
+      return <span>🔁 <b>{e.player}</b> rejoined</span>;
+    case 'rename':
+      return <span>✏️ <b>{e.from}</b> is now <b>{e.player}</b></span>;
     case 'start':
       return <span>🚀 The game started!</span>;
     case 'capture':

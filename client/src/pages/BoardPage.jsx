@@ -88,10 +88,13 @@ function BoardLobby({ state }) {
   );
 }
 
+// The public board shows who is in or out but never word counts, so the room can't tell who is leading.
 function BoardGame({ state }) {
-  const ranked = rankPlayers(state.players);
-  const active = ranked.filter((p) => p.status === 'active');
-  const out = ranked.filter((p) => p.status === 'out');
+  const byName = [...state.players].sort((a, b) => a.name.localeCompare(b.name));
+  const active = byName.filter((p) => p.status === 'active');
+  const out = [...state.players]
+    .filter((p) => p.status === 'out')
+    .sort((a, b) => b.eliminatedAt - a.eliminatedAt);
   const density = active.length <= 12 ? 'lg' : active.length <= 40 ? 'md' : 'sm';
   const lastSteal = [...state.events].reverse().find((e) => e.type === 'capture');
 
@@ -100,18 +103,13 @@ function BoardGame({ state }) {
       <div className="board-stats">
         <span className="pill pill-big">🦹 {active.length} still in</span>
         <span className="pill pill-big">👻 {out.length} caught</span>
-        <span className="pill pill-big">🔤 {state.players.length} words in play</span>
       </div>
       <div className={`tiles tiles-${density}`}>
-        {active.map((p, i) => (
-          <div key={p.id} className={`tile ${i === 0 && p.wordCount > 1 ? 'tile-leader' : ''}`} style={{ '--c': p.color }}>
-            {i === 0 && p.wordCount > 1 && <span className="crown">👑</span>}
+        {active.map((p) => (
+          <div key={p.id} className="tile" style={{ '--c': p.color }}>
             <Avatar player={p} size={density === 'sm' ? 40 : density === 'md' ? 56 : 80} />
             <span className="tile-name">{p.name}</span>
-            <span className="tile-count" key={p.wordCount}>
-              {p.wordCount}
-              <small>{p.wordCount === 1 ? 'word' : 'words'}</small>
-            </span>
+            <span className="tile-status">🦹 still in</span>
           </div>
         ))}
       </div>
@@ -129,7 +127,7 @@ function BoardGame({ state }) {
       )}
       {lastSteal && (
         <div className="ticker">
-          Latest heist: 🦹 <b>{lastSteal.player}</b> stole {plural(lastSteal.count, 'word')} from <b>{lastSteal.target}</b>
+          Latest heist: 🦹 <b>{lastSteal.player}</b> caught <b>{lastSteal.target}</b>
         </div>
       )}
     </div>
@@ -185,7 +183,7 @@ function CaptureFlash({ capture }) {
           <Avatar player={capture.target} size={110} ghost />
         </div>
         <h1 className="shout">
-          {capture.hunter.name} stole {plural(capture.count, 'word')}!
+          {capture.hunter.name} caught {capture.target.name}!
         </h1>
         <p className="tagline">{capture.target.name} said the word… and is OUT! 😱</p>
       </div>

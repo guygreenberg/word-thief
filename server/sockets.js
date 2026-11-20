@@ -28,7 +28,11 @@ export function registerSocketHandlers(io, store) {
           ack({ ok: true, ...fn(payload && typeof payload === 'object' ? payload : {}) });
         } catch (err) {
           if (!(err instanceof GameError)) console.error(`[${event}]`, err);
-          ack({ ok: false, error: err instanceof GameError ? err.message : 'Something went wrong. Please try again.' });
+          ack(
+            err instanceof GameError
+              ? { ok: false, error: err.message, errorCode: err.code }
+              : { ok: false, error: 'Something went wrong. Please try again.' },
+          );
         }
       });
 
@@ -89,6 +93,20 @@ export function registerSocketHandlers(io, store) {
       broadcast(game);
       io.to(gameRoom(game.id)).emit('joined', brief(player));
       return { token: player.token, me: store.playerState(player), state: store.publicState(game) };
+    });
+
+    handle('player:rejoin', ({ gameId, name }) => {
+      const { game, player } = store.rejoinGame(gameId, name);
+      asPlayer(game, player);
+      broadcast(game);
+      return { token: player.token, me: store.playerState(player), state: store.publicState(game) };
+    });
+
+    handle('player:rename', ({ gameId, token, name }) => {
+      const { game, player } = store.renamePlayer(gameId, token, name);
+      broadcast(game);
+      sendMe(game, player);
+      return { me: store.playerState(player) };
     });
 
     handle('player:resume', ({ gameId, token }) => {
