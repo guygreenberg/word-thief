@@ -1363,3 +1363,9 @@ a {
   background: var(--yellow);
   font-size: 1.2rem;
 }
+
+.start-btn {
+  font-size: 1.8rem;
+  padding: 18px 36px;
+  animation: bounce 1.6s ease-in-out infinite;
+}

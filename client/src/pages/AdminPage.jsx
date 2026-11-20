@@ -89,17 +89,6 @@ function AdminDashboard({ id, adminKey, onLogout }) {
       </header>
 
       <div className="toolbar">
-        {state.status === 'lobby' && (
-          <button
-            type="button"
-            className="btn btn-green btn-lg"
-            disabled={busy || !enough}
-            onClick={() => run('admin:start')}
-            title={enough ? '' : `Need at least ${state.minPlayers} players`}
-          >
-            🚀 Start game
-          </button>
-        )}
         <a className="btn btn-blue" href={boardPath(id)} target="_blank" rel="noreferrer">
           📺 Present board
         </a>
@@ -158,11 +147,11 @@ function AdminDashboard({ id, adminKey, onLogout }) {
             <h2>
               Players <span className="count-badge">{state.players.length}</span>
             </h2>
-            {!enough && (
-              <p className="hint">
-                ⏳ Need at least {state.minPlayers} players to start ({state.minPlayers - state.players.length} more)
-              </p>
-            )}
+            <p className="hint">
+              {enough
+                ? '🚀 Ready! Start the game from the game screen.'
+                : `⏳ Need at least ${state.minPlayers} players to start (${state.minPlayers - state.players.length} more)`}
+            </p>
             {state.players.length === 0 ? (
               <p className="muted">No one yet… invite your friends! 🥳</p>
             ) : (

@@ -33,18 +33,18 @@ describe('joining', () => {
 
   it('rejects joining after the game starts', () => {
     const { store, game } = setup();
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     assert.throws(() => store.joinGame(game.id, 'Late'), /already started/);
   });
 });
 
 describe('starting', () => {
-  it('requires the admin key and at least 3 players', () => {
+  it('needs at least 3 players (but no admin login) and can only start once', () => {
     const { store, game } = setup(['Alice', 'Bob']);
-    assert.throws(() => store.startGame(game.id, 'wrong'), /Not authorized/);
-    assert.throws(() => store.startGame(game.id, game.adminKey), /at least 3/);
+    assert.throws(() => store.startGame(game.id), /at least 3/);
     store.joinGame(game.id, 'Carol');
-    assert.equal(store.startGame(game.id, game.adminKey).status, 'active');
+    assert.equal(store.startGame(game.id).status, 'active');
+    assert.throws(() => store.startGame(game.id), /already started/);
   });
 });
 
@@ -53,7 +53,7 @@ describe('capturing', () => {
     const { store, game, players } = setup();
     const { Alice, Bob, Carol } = players;
     const allWords = [...Alice.words, ...Bob.words, ...Carol.words];
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
 
     store.capture(game.id, Alice.token, Bob.code);
     assert.equal(Alice.words.length, 2);
@@ -72,7 +72,7 @@ describe('capturing', () => {
     const { store, game, players } = setup();
     const { Alice, Bob, Carol } = players;
     assert.throws(() => store.capture(game.id, Alice.token, Bob.code), /hasn't started/);
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     assert.throws(() => store.capture(game.id, Alice.token, Alice.code), /your own code/);
     assert.throws(() => store.capture(game.id, Alice.token, 'nope'), /doesn't match/);
     assert.throws(() => store.capture(game.id, 'bad-token', Bob.code), /not a player/);
@@ -89,7 +89,7 @@ describe('undo', () => {
     const { store, game, players } = setup();
     const { Alice, Bob, Carol } = players;
     const [a, b, c] = [Alice.words[0], Bob.words[0], Carol.words[0]];
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     store.capture(game.id, Alice.token, Bob.code);
     store.capture(game.id, Carol.token, Alice.code);
 
@@ -111,14 +111,14 @@ describe('undo', () => {
 describe('ending early', () => {
   it('declares the player with the most words, or no winner on a tie', () => {
     const { store, game, players } = setup(['A', 'B', 'C', 'D']);
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     store.capture(game.id, players.A.token, players.B.code);
     store.endGame(game.id, game.adminKey);
     assert.equal(game.winnerId, players.A.id);
     assert.throws(() => store.undoLastCapture(game.id, game.adminKey), /ended by the host/);
 
     const tie = setup();
-    tie.store.startGame(tie.game.id, tie.game.adminKey);
+    tie.store.startGame(tie.game.id);
     tie.store.endGame(tie.game.id, tie.game.adminKey);
     assert.equal(tie.game.winnerId, null);
   });
@@ -127,7 +127,7 @@ describe('ending early', () => {
 describe('public state', () => {
   it('hides secrets, words and word counts from players until the game is finished', () => {
     const { store, game, players } = setup();
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     store.capture(game.id, players.Alice.token, players.Bob.code);
     const pub = store.publicState(game);
     const json = JSON.stringify(pub);
@@ -154,7 +154,7 @@ describe('player state', () => {
   it('keeps showing only the original word after stealing, plus the total count', () => {
     const { store, game, players } = setup();
     const original = players.Alice.words[0];
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     store.capture(game.id, players.Alice.token, players.Bob.code);
     const me = store.playerState(players.Alice);
     assert.equal(me.word, original);
@@ -171,7 +171,7 @@ describe('short capture codes', () => {
     assert.equal(new Set(codes).size, codes.length);
     for (const code of codes) assert.match(code, new RegExp(`^[A-Z0-9]{${CAPTURE_CODE_LENGTH}}$`));
 
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     const typed = ` ${players.B.code.slice(0, 3).toLowerCase()}-${players.B.code.slice(3)} `;
     store.capture(game.id, players.A.token, typed);
     assert.equal(players.B.status, 'out');
@@ -182,7 +182,7 @@ describe('short capture codes', () => {
     const store = new GameStore({ now: () => now });
     const game = store.createGame();
     const [a, b] = ['A', 'B', 'C'].map((n) => store.joinGame(game.id, n).player);
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     for (let i = 0; i < MAX_WRONG_CODES_PER_MINUTE; i++) {
       assert.throws(() => store.capture(game.id, a.token, 'ZZZZZZ'), /doesn't match/);
     }
@@ -196,7 +196,7 @@ describe('short capture codes', () => {
 describe('rejoining', () => {
   it('returns the same player (and session token) for their original name, also after the game started', () => {
     const { store, game, players } = setup();
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     store.capture(game.id, players.Alice.token, players.Bob.code);
     const { player } = store.rejoinGame(game.id, '  ALICE ');
     assert.equal(player.id, players.Alice.id);
@@ -207,7 +207,7 @@ describe('rejoining', () => {
 
   it('rejects unknown names and still blocks new players after the start', () => {
     const { store, game } = setup();
-    store.startGame(game.id, game.adminKey);
+    store.startGame(game.id);
     assert.throws(() => store.rejoinGame(game.id, 'Zed'), /no player called "Zed"/);
     assert.throws(() => store.joinGame(game.id, 'Zed'), /already started/);
   });

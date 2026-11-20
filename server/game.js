@@ -172,8 +172,9 @@ export class GameStore {
     return { game, player };
   }
 
-  startGame(gameId, adminKey) {
-    const game = this.requireAdmin(gameId, adminKey);
+  /** Started from the shared game screen, so no admin login is needed. */
+  startGame(gameId) {
+    const game = this.getGame(gameId);
     if (game.status !== 'lobby') throw new GameError('The game has already started');
     if (game.players.size < MIN_PLAYERS) throw new GameError(`Need at least ${MIN_PLAYERS} players to start`);
     game.status = 'active';

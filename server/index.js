@@ -8,8 +8,13 @@ import { AdminAuth } from './auth.js';
 import { GameStore } from './game.js';
 import { registerSocketHandlers } from './sockets.js';
 
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Load local settings (e.g. ADMIN_PASSWORD) from a git-ignored .env, however the server was started.
+// Variables already set in the environment (as on a cloud host) take precedence.
+if (existsSync(path.join(rootDir, '.env'))) process.loadEnvFile(path.join(rootDir, '.env'));
+
 const PORT = Number(process.env.PORT) || 3001;
-const distDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
+const distDir = path.join(rootDir, 'dist');
 
 const app = express();
 const server = http.createServer(app);

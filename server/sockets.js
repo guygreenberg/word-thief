@@ -70,8 +70,8 @@ export function registerSocketHandlers(io, store, auth) {
       return { state: store.publicState(game, { admin: true }) };
     });
 
-    handle('admin:start', ({ gameId, adminKey }) => {
-      const game = store.startGame(gameId, adminKey);
+    handle('game:start', ({ gameId }) => {
+      const game = store.startGame(gameId);
       broadcast(game);
       return {};
     });

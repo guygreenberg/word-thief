@@ -5,7 +5,7 @@ players to **say your word out loud**, then scan their QR code to steal **all** 
 They're out. The last thief standing, holding every word in the game, wins.
 
 - **Game screen**: the laptop/TV view opened when a game is created. Shows the join QR, who is still in and who is out (no word counts, so the room can't tell who is leading), steal animations, and a winner screen. A **🔐 Admin** button leads to admin mode.
-- **Admin mode** (username + password): dashboard with the join QR, live leaderboard with word counts, start, undo, and end game, plus a full-screen **score board** with every player's word count, sorted from high to low.
+- **Admin mode** (username + password): dashboard with the join QR, live leaderboard with word counts, undo, and end game, plus a full-screen **score board** with every player's word count, sorted from high to low.
 - **Players**: mobile web app (no install). Join by scanning a QR, see your one secret word and how many words you've stolen, scan a QR or type a code to steal, change your name, and rejoin by name if you lose the page. Other players' word counts are hidden until the game ends.
 - 3 to 300 players per game, real-time over WebSockets, with synthesized sound effects, confetti, and vibration.
 
@@ -14,7 +14,7 @@ They're out. The last thief standing, holding every word in the game, wins.
 1. Host opens the site on a laptop and clicks **Host a new game**. The game screen shows a join QR.
    Click **🔐 Admin** and log in to manage the game.
 2. Players scan the QR, enter a name, and get a random word plus their own player QR.
-3. Once 3 or more players have joined, the host clicks **Start game**.
+3. Once 3 or more players have joined, click **🚀 Start game!** on the game screen (no login needed).
 4. When player A makes player B say A's word, A tells B **secretly** (whisper or step aside) so the
    other players don't learn A's word. B taps **"I said their word…"** to show their QR and a short
    code, and A taps **"They said my word!"** to scan the QR or type the code. B's words move to A and
@@ -52,7 +52,7 @@ minute). After logging in, the device remembers admin access for that game until
 
 ## Run locally
 
-Requires Node.js 22.9+.
+Requires Node.js 20.12+.
 
 ```bash
 npm install

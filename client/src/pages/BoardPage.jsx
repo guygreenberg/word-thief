@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Avatar, Elapsed, FullPageMessage, LocalhostWarning, Logo, MuteButton, QR } from '../components/ui.jsx';
+import { request } from '../socket.js';
+import { Avatar, Elapsed, FullPageMessage, LocalhostWarning, Logo, MuteButton, QR, useToast } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
 import { plural, rankPlayers, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
 import { joinUrl } from '../links.js';
@@ -63,6 +64,20 @@ export default function BoardPage() {
 
 function BoardLobby({ state }) {
   const missing = state.minPlayers - state.players.length;
+  const toast = useToast();
+  const [starting, setStarting] = useState(false);
+
+  async function start() {
+    setStarting(true);
+    try {
+      await request('game:start', { gameId: state.id });
+    } catch (e) {
+      play('error');
+      toast({ emoji: '😬', text: e.message, tone: 'error' });
+      setStarting(false);
+    }
+  }
+
   return (
     <div className="board-lobby">
       <section className="card text-center board-qr">
@@ -83,9 +98,13 @@ function BoardLobby({ state }) {
             </div>
           ))}
         </div>
-        <p className="waiting bounce">
-          {missing > 0 ? `Waiting for ${missing} more…` : 'Waiting for the host to start the game…'}
-        </p>
+        {missing > 0 ? (
+          <p className="waiting bounce">Waiting for {missing} more…</p>
+        ) : (
+          <button type="button" className="btn btn-green btn-xl start-btn" onClick={start} disabled={starting}>
+            {starting ? 'Starting…' : '🚀 Start game!'}
+          </button>
+        )}
       </section>
     </div>
   );
