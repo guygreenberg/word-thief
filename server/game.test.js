@@ -93,18 +93,18 @@ describe('undo', () => {
     store.capture(game.id, Alice.token, Bob.code);
     store.capture(game.id, Carol.token, Alice.code);
 
-    store.undoLastCapture(game.id, game.adminKey);
+    store.undoLastCapture(game.id);
     assert.equal(game.status, 'active');
     assert.equal(game.winnerId, null);
     assert.deepEqual(Alice.words, [a, b]);
     assert.deepEqual(Carol.words, [c]);
     assert.equal(Alice.status, 'active');
 
-    store.undoLastCapture(game.id, game.adminKey);
+    store.undoLastCapture(game.id);
     assert.deepEqual(Alice.words, [a]);
     assert.deepEqual(Bob.words, [b]);
     assert.equal(Bob.status, 'active');
-    assert.throws(() => store.undoLastCapture(game.id, game.adminKey), /Nothing to undo/);
+    assert.throws(() => store.undoLastCapture(game.id), /Nothing to undo/);
   });
 });
 
@@ -113,13 +113,13 @@ describe('ending early', () => {
     const { store, game, players } = setup(['A', 'B', 'C', 'D']);
     store.startGame(game.id);
     store.capture(game.id, players.A.token, players.B.code);
-    store.endGame(game.id, game.adminKey);
+    store.endGame(game.id);
     assert.equal(game.winnerId, players.A.id);
-    assert.throws(() => store.undoLastCapture(game.id, game.adminKey), /ended by the host/);
+    assert.throws(() => store.undoLastCapture(game.id), /ended by the host/);
 
     const tie = setup();
     tie.store.startGame(tie.game.id);
-    tie.store.endGame(tie.game.id, tie.game.adminKey);
+    tie.store.endGame(tie.game.id);
     assert.equal(tie.game.winnerId, null);
   });
 });

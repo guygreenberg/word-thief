@@ -51,10 +51,17 @@ export function registerSocketHandlers(io, store, auth) {
       return { gameId: game.id };
     });
 
-    handle('admin:login', ({ gameId, username, password }) => {
-      const game = store.getGame(gameId);
-      auth.verify(clientId, username, password);
-      return { adminKey: game.adminKey };
+    // One admin login unlocks admin mode for every game.
+    handle('admin:login', ({ username, password }) => ({ adminKey: auth.login(clientId, username, password) }));
+
+    handle('admin:logout', ({ adminKey }) => {
+      auth.logout(adminKey);
+      return {};
+    });
+
+    handle('admin:games', ({ adminKey }) => {
+      auth.requireSession(adminKey);
+      return { games: store.listGames() };
     });
 
     handle('game:watch', ({ gameId }) => {
@@ -64,7 +71,8 @@ export function registerSocketHandlers(io, store, auth) {
     });
 
     handle('admin:watch', ({ gameId, adminKey }) => {
-      const game = store.requireAdmin(gameId, adminKey);
+      auth.requireSession(adminKey);
+      const game = store.getGame(gameId);
       watch(game);
       socket.join(adminRoom(game.id));
       return { state: store.publicState(game, { admin: true }) };
@@ -77,14 +85,16 @@ export function registerSocketHandlers(io, store, auth) {
     });
 
     handle('admin:kick', ({ gameId, adminKey, playerId }) => {
-      const { game, player } = store.kickPlayer(gameId, adminKey, playerId);
+      auth.requireSession(adminKey);
+      const { game, player } = store.kickPlayer(gameId, playerId);
       io.to(playerRoom(game.id, player.id)).emit('kicked');
       broadcast(game);
       return {};
     });
 
     handle('admin:undo', ({ gameId, adminKey }) => {
-      const { game, hunter, target } = store.undoLastCapture(gameId, adminKey);
+      auth.requireSession(adminKey);
+      const { game, hunter, target } = store.undoLastCapture(gameId);
       broadcast(game);
       sendMe(game, hunter);
       sendMe(game, target);
@@ -93,7 +103,8 @@ export function registerSocketHandlers(io, store, auth) {
     });
 
     handle('admin:end', ({ gameId, adminKey }) => {
-      const game = store.endGame(gameId, adminKey);
+      auth.requireSession(adminKey);
+      const game = store.endGame(gameId);
       broadcast(game);
       return {};
     });

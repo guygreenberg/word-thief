@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { GameError } from './game.js';
 
 const digest = (value) => createHash('sha256').update(String(value ?? '')).digest();
@@ -8,13 +8,15 @@ const digest = (value) => createHash('sha256').update(String(value ?? '')).diges
  * failed attempts are rate limited per client to slow down password guessing.
  */
 export class AdminAuth {
-  constructor({ username, password, now = () => Date.now(), maxFailures = 5, windowMs = 60_000 }) {
+  constructor({ username, password, now = () => Date.now(), maxFailures = 5, windowMs = 60_000, sessionTtlMs = 12 * 60 * 60 * 1000 }) {
     this.username = username;
     this.password = password;
     this.now = now;
     this.maxFailures = maxFailures;
     this.windowMs = windowMs;
     this.failures = new Map();
+    this.sessionTtlMs = sessionTtlMs;
+    this.sessions = new Map();
   }
 
   get configured() {
@@ -36,5 +38,25 @@ export class AdminAuth {
       throw new GameError('Wrong username or password');
     }
     this.failures.delete(clientId);
+  }
+
+  /** Verifies the credentials and returns a session token that unlocks admin mode for every game. */
+  login(clientId, username, password) {
+    this.verify(clientId, username, password);
+    const token = randomBytes(24).toString('base64url');
+    this.sessions.set(token, this.now() + this.sessionTtlMs);
+    return token;
+  }
+
+  requireSession(token) {
+    const expiresAt = typeof token === 'string' ? this.sessions.get(token) : undefined;
+    if (!expiresAt || expiresAt < this.now()) {
+      if (expiresAt) this.sessions.delete(token);
+      throw new GameError('Please log in to admin mode', 'NOT_AUTHORIZED');
+    }
+  }
+
+  logout(token) {
+    this.sessions.delete(token);
   }
 }

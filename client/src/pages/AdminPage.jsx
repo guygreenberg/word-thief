@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AdminLogin,
   Avatar,
@@ -21,7 +21,7 @@ import { request } from '../socket.js';
 
 export default function AdminPage() {
   const id = useParams().gameId.toUpperCase();
-  const [adminKey, setAdminKey] = useAdminKey(id);
+  const [adminKey, setAdminKey] = useAdminKey();
   if (!adminKey) return <AdminLogin gameId={id} onLogin={setAdminKey} />;
   return <AdminDashboard id={id} adminKey={adminKey} onLogout={() => setAdminKey(null)} />;
 }
@@ -89,6 +89,9 @@ function AdminDashboard({ id, adminKey, onLogout }) {
       </header>
 
       <div className="toolbar">
+        <Link className="btn btn-ghost" to="/admin">
+          ← All games
+        </Link>
         <a className="btn btn-blue" href={boardPath(id)} target="_blank" rel="noreferrer">
           📺 Present board
         </a>
@@ -124,6 +127,7 @@ function AdminDashboard({ id, adminKey, onLogout }) {
           type="button"
           className="btn btn-ghost"
           onClick={() => {
+            request('admin:logout', { adminKey }).catch(() => {});
             navigate(boardPath(id));
             onLogout();
           }}

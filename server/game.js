@@ -8,7 +8,10 @@ export const CAPTURE_CODE_LENGTH = 6;
 // Short typed capture codes are guessable in theory, so wrong guesses are rate limited per player.
 export const MAX_WRONG_CODES_PER_MINUTE = 8;
 const MAX_EVENTS = 50;
-const GAME_TTL_MS = 12 * 60 * 60 * 1000;
+export const GAME_TTL_MS = 12 * 60 * 60 * 1000;
+// Changed games are written to storage in batches, so a burst of steals becomes one write per game.
+const SAVE_DELAY_MS = 200;
+const SAVE_RETRY_MS = 5000;
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const AVATARS = [
@@ -52,9 +55,66 @@ export function normalizeName(raw) {
 }
 
 export class GameStore {
-  constructor({ now = () => Date.now() } = {}) {
+  /** `persistence` (optional) saves games so they survive restarts; without it games live only in memory. */
+  constructor({ now = () => Date.now(), persistence = null } = {}) {
     this.games = new Map();
     this.now = now;
+    this.persistence = persistence;
+    this.dirty = new Set();
+    this.saveTimer = null;
+  }
+
+  /** Reloads saved games on startup, dropping ones that expired while the server was down. */
+  restore() {
+    if (!this.persistence) return 0;
+    const cutoff = this.now() - GAME_TTL_MS;
+    for (const data of this.persistence.loadAll()) {
+      if (data.lastActivity < cutoff) {
+        this.persistence.remove(data.id);
+        continue;
+      }
+      this.games.set(data.id, deserializeGame(data));
+    }
+    return this.games.size;
+  }
+
+  /** Writes every changed game now (also called on shutdown so no change is lost). */
+  flush() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    if (!this.persistence) return;
+    for (const id of this.dirty) {
+      try {
+        const game = this.games.get(id);
+        if (game) this.persistence.save(id, serializeGame(game));
+        else this.persistence.remove(id);
+        this.dirty.delete(id);
+      } catch (err) {
+        // A failed write must never crash the game: keep it dirty and retry shortly.
+        console.error(`Could not save game ${id}: ${err.message}`);
+      }
+    }
+    if (this.dirty.size) this.saveTimer = setTimeout(() => this.flush(), SAVE_RETRY_MS);
+  }
+
+  /** Summary of every game for the admin games list, newest first. */
+  listGames() {
+    return [...this.games.values()]
+      .map((g) => {
+        const players = [...g.players.values()];
+        return {
+          id: g.id,
+          status: g.status,
+          createdAt: g.createdAt,
+          startedAt: g.startedAt,
+          endedAt: g.endedAt,
+          lastActivity: g.lastActivity,
+          playerCount: players.length,
+          activeCount: players.filter((p) => p.status === 'active').length,
+          winner: g.winnerId ? g.players.get(g.winnerId)?.name ?? null : null,
+        };
+      })
+      .sort((a, b) => b.createdAt - a.createdAt);
   }
 
   createGame() {
@@ -62,7 +122,6 @@ export class GameStore {
     do id = randomCode(5); while (this.games.has(id));
     const game = {
       id,
-      adminKey: secret(),
       status: 'lobby',
       createdAt: this.now(),
       startedAt: null,
@@ -76,18 +135,13 @@ export class GameStore {
       lastActivity: this.now(),
     };
     this.games.set(id, game);
+    this.#touch(game);
     return game;
   }
 
   getGame(gameId) {
     const game = this.games.get(String(gameId ?? '').toUpperCase());
     if (!game) throw new GameError('Game not found. Check the code and try again.');
-    return game;
-  }
-
-  requireAdmin(gameId, adminKey) {
-    const game = this.getGame(gameId);
-    if (!adminKey || adminKey !== game.adminKey) throw new GameError('Not authorized to manage this game', 'NOT_AUTHORIZED');
     return game;
   }
 
@@ -161,8 +215,8 @@ export class GameStore {
     return { game, player };
   }
 
-  kickPlayer(gameId, adminKey, playerId) {
-    const game = this.requireAdmin(gameId, adminKey);
+  kickPlayer(gameId, playerId) {
+    const game = this.getGame(gameId);
     if (game.status !== 'lobby') throw new GameError('Players can only be removed before the game starts');
     const player = game.players.get(playerId);
     if (!player) throw new GameError('Player not found');
@@ -217,8 +271,8 @@ export class GameStore {
     return { game, hunter, target, stolen };
   }
 
-  undoLastCapture(gameId, adminKey) {
-    const game = this.requireAdmin(gameId, adminKey);
+  undoLastCapture(gameId) {
+    const game = this.getGame(gameId);
     if (game.endedByAdmin) throw new GameError('The game was ended by the host and cannot be undone');
     const last = game.captures.pop();
     if (!last) throw new GameError('Nothing to undo');
@@ -239,8 +293,8 @@ export class GameStore {
     return { game, hunter, target };
   }
 
-  endGame(gameId, adminKey) {
-    const game = this.requireAdmin(gameId, adminKey);
+  endGame(gameId) {
+    const game = this.getGame(gameId);
     if (game.status === 'finished') throw new GameError('The game is already over');
     const ranked = [...game.players.values()].sort((a, b) => b.words.length - a.words.length);
     const isTie = ranked.length > 1 && ranked[0].words.length === ranked[1].words.length;
@@ -251,7 +305,11 @@ export class GameStore {
 
   cleanup() {
     const cutoff = this.now() - GAME_TTL_MS;
-    for (const [id, game] of this.games) if (game.lastActivity < cutoff) this.games.delete(id);
+    for (const [id, game] of this.games) {
+      if (game.lastActivity >= cutoff) continue;
+      this.games.delete(id);
+      this.#markDirty(id);
+    }
   }
 
   /**
@@ -325,5 +383,27 @@ export class GameStore {
 
   #touch(game) {
     game.lastActivity = this.now();
+    this.#markDirty(game.id);
   }
+
+  #markDirty(id) {
+    if (!this.persistence) return;
+    this.dirty.add(id);
+    this.saveTimer ??= setTimeout(() => this.flush(), SAVE_DELAY_MS);
+  }
+}
+
+// Rate-limit timestamps are deliberately not saved: they only matter for the next minute.
+export function serializeGame(game) {
+  return {
+    ...game,
+    players: [...game.players.values()].map(({ wrongCodes, ...player }) => player),
+  };
+}
+
+export function deserializeGame(data) {
+  return {
+    ...data,
+    players: new Map(data.players.map((p) => [p.id, { ...p, wrongCodes: [] }])),
+  };
 }

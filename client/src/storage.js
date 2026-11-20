@@ -1,5 +1,5 @@
 const key = {
-  admin: (gameId) => `wordthief:admin:${gameId}`,
+  admin: 'wordthief:admin',
   player: (gameId) => `wordthief:player:${gameId}`,
   muted: 'wordthief:muted',
 };
@@ -21,8 +21,8 @@ const write = (k, v) => {
 };
 
 export const storage = {
-  getAdminKey: (gameId) => read(key.admin(gameId)),
-  setAdminKey: (gameId, adminKey) => write(key.admin(gameId), adminKey),
+  getAdminKey: () => read(key.admin),
+  setAdminKey: (adminKey) => write(key.admin, adminKey),
   getPlayerToken: (gameId) => read(key.player(gameId)),
   setPlayerToken: (gameId, token) => write(key.player(gameId), token),
   isMuted: () => read(key.muted) === '1',

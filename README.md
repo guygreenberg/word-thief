@@ -5,7 +5,7 @@ players to **say your word out loud**, then scan their QR code to steal **all** 
 They're out. The last thief standing, holding every word in the game, wins.
 
 - **Game screen**: the laptop/TV view opened when a game is created. Shows the join QR, who is still in and who is out (no word counts, so the room can't tell who is leading), steal animations, and a winner screen. A **🔐 Admin** button leads to admin mode.
-- **Admin mode** (username + password): dashboard with the join QR, live leaderboard with word counts, undo, and end game, plus a full-screen **score board** with every player's word count, sorted from high to low.
+- **Admin mode** (username + password, at `/admin`): list of all games (active, and optionally finished) with links to manage each one or open its game screen. Per game: dashboard with the join QR, live leaderboard with word counts, undo, and end game, plus a full-screen **score board** with every player's word count, sorted from high to low.
 - **Players**: mobile web app (no install). Join by scanning a QR, see your one secret word and how many words you've stolen, scan a QR or type a code to steal, change your name, and rejoin by name if you lose the page. Other players' word counts are hidden until the game ends.
 - 3 to 300 players per game, real-time over WebSockets, with synthesized sound effects, confetti, and vibration.
 
@@ -48,7 +48,15 @@ until the game ends.
 
 Admin mode uses one username and password for all games, read from the `ADMIN_USERNAME` and
 `ADMIN_PASSWORD` environment variables (never commit them). Failed logins are rate-limited (5 per
-minute). After logging in, the device remembers admin access for that game until **Exit admin mode**.
+minute). A login is valid for every game for 12 hours on that device, or until **Exit admin mode**.
+Admin sessions are not saved, so the host logs in again after a server restart.
+
+### Saving games (`DATA_DIR`)
+
+When `DATA_DIR` is set, every game is saved as a JSON file in `$DATA_DIR/games` (changes are batched
+every 200 ms, files are written atomically, and pending changes are saved on shutdown). On startup the
+server reloads them, so games continue after a restart or redeploy and players reconnect on their own.
+Without `DATA_DIR` (e.g. local development) games live in memory only.
 
 ## Run locally
 
@@ -82,6 +90,11 @@ Any host with WebSocket support and HTTPS works:
   listens on `$PORT`. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` as environment variables. On Cloud
   Run, enable session affinity.
 
-Keep it to **one instance**: game state is held in memory, so games are lost on restart and can't be
-shared across replicas. Games are cleaned up after 12 hours of inactivity. To scale out or survive
-restarts later, move `GameStore` to Redis and add the Socket.io Redis adapter.
+On Render, attach a **persistent disk** (1 GB is plenty) mounted at `/var/data`; `render.yaml` sets
+`DATA_DIR=/var/data`. The Docker entrypoint makes the disk writable and then runs the app as the
+unprivileged `node` user. With a disk, Render can't do zero-downtime deploys, so each deploy briefly
+disconnects players (they reconnect automatically); avoid deploying mid-game.
+
+Keep it to **one instance**: live game state is held in memory (the disk is a backup), so it can't be
+shared across replicas. Games are cleaned up after 12 hours of inactivity. To scale out later, move
+`GameStore` to Redis and add the Socket.io Redis adapter.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { onMuteChange, isMuted } from './effects.js';
 import { onEveryConnect, request, socket } from './socket.js';
 import { storage } from './storage.js';
@@ -40,13 +40,13 @@ export function useGameWatch(gameId, adminKey) {
   return { state, error, errorCode };
 }
 
-/** Admin key for this game, obtained by logging in and remembered on this device. */
-export function useAdminKey(gameId) {
-  const [adminKey, setAdminKeyState] = useState(() => storage.getAdminKey(gameId));
-  const setAdminKey = (key) => {
-    storage.setAdminKey(gameId, key);
+/** Admin session from logging in, shared by every game and remembered on this device. */
+export function useAdminKey() {
+  const [adminKey, setAdminKeyState] = useState(() => storage.getAdminKey());
+  const setAdminKey = useCallback((key) => {
+    storage.setAdminKey(key);
     setAdminKeyState(key);
-  };
+  }, []);
   return [adminKey, setAdminKey];
 }
 

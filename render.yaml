@@ -5,9 +5,11 @@ services:
     runtime: docker
     plan: starter
     healthCheckPath: /healthz
-    numInstances: 1 # game state lives in memory, so keep a single instance
+    numInstances: 1 # games are held in memory (and saved to the disk), so keep a single instance
     envVars:
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
         sync: false # Render asks for the value when the Blueprint is created
+      - key: DATA_DIR
+        value: /var/data # mount path of the persistent disk; games are saved here and survive deploys

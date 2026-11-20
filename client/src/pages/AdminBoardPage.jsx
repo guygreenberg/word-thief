@@ -7,7 +7,7 @@ import { plural, rankPlayers, useAdminKey, useChange, useGameWatch, useSocketEve
 /** Host-only scoreboard with word counts. The public board deliberately hides counts. */
 export default function AdminBoardPage() {
   const id = useParams().gameId.toUpperCase();
-  const [adminKey, setAdminKey] = useAdminKey(id);
+  const [adminKey, setAdminKey] = useAdminKey();
   if (!adminKey) return <AdminLogin gameId={id} onLogin={setAdminKey} />;
   return <AdminBoard id={id} adminKey={adminKey} onLogout={() => setAdminKey(null)} />;
 }

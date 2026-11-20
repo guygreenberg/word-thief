@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Logo, MuteButton, useToast } from '../components/ui.jsx';
 import { play } from '../effects.js';
 import { request } from '../socket.js';
@@ -40,7 +40,12 @@ export default function HomePage() {
     <div className="page home">
       <header className="topbar">
         <span />
-        <MuteButton />
+        <div className="topbar-right">
+          <Link className="btn btn-sm btn-ghost" to="/admin">
+            🔐 Admin
+          </Link>
+          <MuteButton />
+        </div>
       </header>
       <section className="hero text-center">
         <Logo size="xl" />

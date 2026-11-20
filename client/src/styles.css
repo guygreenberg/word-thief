@@ -1369,3 +1369,44 @@ a {
   padding: 18px 36px;
   animation: bounce 1.6s ease-in-out infinite;
 }
+
+/* ---------- Admin games list ---------- */
+
+.games-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.game-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: var(--border);
+  border-radius: 16px;
+  background: #fff;
+}
+.game-code {
+  font-size: 1.3rem;
+  min-width: 100px;
+}
+.game-info {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.game-actions {
+  display: flex;
+  gap: 8px;
+}
+.toggle {
+  flex-direction: row;
+  gap: 8px;
+}

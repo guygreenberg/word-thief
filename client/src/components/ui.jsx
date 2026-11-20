@@ -172,6 +172,7 @@ function EventText({ event: e }) {
   }
 }
 
+/** Admin mode login. `gameId` (optional) only changes the "back" link. */
 export function AdminLogin({ gameId, onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -183,7 +184,7 @@ export function AdminLogin({ gameId, onLogin }) {
     setBusy(true);
     setError(null);
     try {
-      const { adminKey } = await request('admin:login', { gameId, username, password });
+      const { adminKey } = await request('admin:login', { username, password });
       onLogin(adminKey);
     } catch (err) {
       setError(err.message);
@@ -199,7 +200,7 @@ export function AdminLogin({ gameId, onLogin }) {
       <form className="card narrow text-center pop-in" onSubmit={submit}>
         <div className="big-emoji">🔐</div>
         <h2>Admin mode</h2>
-        <p className="muted">Game #{gameId}. Log in to manage the game.</p>
+        <p className="muted">{gameId ? `Game #${gameId}. ` : ''}Log in to manage games.</p>
         <label className="label" htmlFor="admin-user">Username</label>
         <input id="admin-user" className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" autoFocus required />
         <label className="label" htmlFor="admin-pass">Password</label>
@@ -208,8 +209,8 @@ export function AdminLogin({ gameId, onLogin }) {
         <button type="submit" className="btn btn-primary btn-lg btn-block spaced" disabled={busy}>
           {busy ? 'Checking…' : 'Log in'}
         </button>
-        <Link className="btn btn-ghost btn-block spaced" to={`/board/${gameId}`}>
-          ← Back to the game screen
+        <Link className="btn btn-ghost btn-block spaced" to={gameId ? `/board/${gameId}` : '/'}>
+          ← {gameId ? 'Back to the game screen' : 'Back home'}
         </Link>
       </form>
     </div>

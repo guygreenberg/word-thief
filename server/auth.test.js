@@ -25,4 +25,18 @@ describe('admin login', () => {
     now += 61_000;
     auth.verify('ip1', 'admin', 'pw');
   });
+
+  it('issues session tokens that unlock admin mode until logout or expiry', () => {
+    let now = 0;
+    const auth = new AdminAuth({ username: 'admin', password: 'pw', now: () => now, sessionTtlMs: 1000 });
+    assert.throws(() => auth.requireSession(undefined), (e) => e.code === 'NOT_AUTHORIZED');
+    const token = auth.login('ip', 'admin', 'pw');
+    auth.requireSession(token);
+    auth.logout(token);
+    assert.throws(() => auth.requireSession(token), /log in/);
+
+    const other = auth.login('ip', 'admin', 'pw');
+    now += 1001;
+    assert.throws(() => auth.requireSession(other), /log in/);
+  });
 });

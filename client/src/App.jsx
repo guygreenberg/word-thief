@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import { ConnectionBanner, FloatingEmojis, FullPageMessage, ToastProvider } from './components/ui.jsx';
 import AdminBoardPage from './pages/AdminBoardPage.jsx';
+import AdminGamesPage from './pages/AdminGamesPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import BoardPage from './pages/BoardPage.jsx';
 import CapturePage from './pages/CapturePage.jsx';
@@ -15,6 +16,7 @@ export default function App() {
       <ConnectionBanner />
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/admin" element={<AdminGamesPage />} />
         <Route path="/admin/:gameId" element={<AdminPage />} />
         <Route path="/admin/:gameId/board" element={<AdminBoardPage />} />
         <Route path="/board/:gameId" element={<BoardPage />} />
