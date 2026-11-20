@@ -72,10 +72,10 @@ function PlayerGame({ id, token }) {
     storage.setPlayerToken(id, null);
     setKicked(true);
   });
-  useSocketEvent('capture', ({ hunter, target, count }) => {
+  useSocketEvent('capture', ({ hunter, target }) => {
     if (!me || hunter.id === me.id || target.id === me.id) return;
     if ((state?.players.length ?? 0) <= TOAST_OTHERS_MAX_PLAYERS) {
-      toast({ emoji: '🦹', text: `${hunter.name} stole ${plural(count, 'word')} from ${target.name}`, duration: 2500 });
+      toast({ emoji: '🦹', text: `${hunter.name} caught ${target.name}`, duration: 2500 });
     }
   });
   useSocketEvent('undo', ({ hunter, target }) => {
@@ -122,7 +122,7 @@ function PlayerGame({ id, token }) {
       const res = await request('player:capture', { gameId: id, token, code: getCode() });
       setScanning(false);
       setMe(res.me);
-      showSteal({ words: res.stolen, target: res.target });
+      showSteal({ count: res.count, target: res.target });
     } catch (e) {
       play('error');
       toast({ emoji: '🙅', text: e.message, tone: 'error' });
@@ -176,7 +176,7 @@ function PlayerGame({ id, token }) {
         <>
           <MeCard id={id} token={token} me={me} onRenamed={setMe} />
 
-          <WordVault words={me.words} />
+          <WordVault word={me.word} />
 
           {state.status === 'lobby' ? (
             <section className="card text-center">
@@ -205,7 +205,9 @@ function PlayerGame({ id, token }) {
               </section>
               <section className="card">
                 <h3>🏁 {plural(activeCount, 'thief', 'thieves')} still in</h3>
-                <Leaderboard players={state.players} highlightId={me.id} limit={5} />
+                <div className="scroll-list">
+                  <Leaderboard players={state.players} highlightId={me.id} showCounts={false} />
+                </div>
               </section>
             </>
           )}
@@ -235,16 +237,14 @@ function PlayerGame({ id, token }) {
       {stolen && (
         <Modal onClose={() => setStolen(null)} className="text-center">
           <div className="big-emoji wiggle">💰</div>
-          <h2>You stole {plural(stolen.words.length, 'word')}!</h2>
+          <h2>You stole {plural(stolen.count, 'word')}!</h2>
           <p>
             <b>{stolen.target.name}</b> is out of the game 👻
           </p>
-          <div className="word-cloud">
-            {stolen.words.map((w) => (
-              <span key={w} className="word-chip pop-in">{w}</span>
-            ))}
-          </div>
-          <p className="muted">You now have {plural(me.words.length, 'word')}. Use any of them!</p>
+          <p className="stolen-total">
+            🦹 Stolen so far: <b>{me.wordCount - 1}</b>
+          </p>
+          <p className="muted">Your secret word stays the same. Go get the next one!</p>
           <button type="button" className="btn btn-primary btn-block" onClick={() => setStolen(null)}>
             Keep stealing 🦹
           </button>
@@ -323,7 +323,7 @@ function MeCard({ id, token, me, onRenamed }) {
               ✏️
             </button>
           </h2>
-          <span className="pill pill-dark">{plural(me.words.length, 'word')}</span>
+          <span className="pill pill-dark">🦹 {plural(me.wordCount - 1, 'word')} stolen</span>
         </div>
       )}
     </section>
@@ -375,22 +375,20 @@ function StealPanel({ onScan, onCode, onCancel }) {
   );
 }
 
-function WordVault({ words }) {
+function WordVault({ word }) {
   const [revealed, setRevealed] = useState(false);
   return (
     <section className={`card vault ${revealed ? 'vault-open' : ''}`}>
       <div className="vault-head">
-        <h3>{words.length === 1 ? '🤫 Your secret word' : `🤫 Your ${words.length} secret words`}</h3>
+        <h3>🤫 Your secret word</h3>
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => setRevealed((r) => !r)}>
           {revealed ? '🙈 Hide' : '👀 Peek'}
         </button>
       </div>
       <div className="word-cloud" onClick={() => setRevealed((r) => !r)}>
-        {words.map((w) => (
-          <span key={w} className="word-chip">{revealed ? w : '•'.repeat(Math.min(w.length, 8))}</span>
-        ))}
+        <span className="word-chip">{revealed ? word : '•'.repeat(Math.min(word.length, 8))}</span>
       </div>
-      <p className="muted small">Make anyone say <b>any</b> of these, tell them secretly, then scan their QR or type their code!</p>
+      <p className="muted small">Make someone say it, tell them secretly, then scan their QR or type their code!</p>
     </section>
   );
 }
@@ -408,7 +406,9 @@ function CaughtView({ me, capturer, state }) {
       </section>
       <section className="card">
         <h3>👀 Who's still in</h3>
-        <Leaderboard players={state.players} highlightId={me.id} limit={10} />
+        <div className="scroll-list">
+          <Leaderboard players={state.players} highlightId={me.id} showCounts={false} />
+        </div>
       </section>
     </>
   );
@@ -416,7 +416,7 @@ function CaughtView({ me, capturer, state }) {
 
 function FinishedView({ me, state }) {
   const won = state.winner?.id === me.id;
-  const myWords = state.players.find((p) => p.id === me.id)?.words ?? me.words;
+  const myWords = state.players.find((p) => p.id === me.id)?.words ?? [];
   return (
     <>
       <section className="card text-center pop-in">

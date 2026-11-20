@@ -16,7 +16,7 @@ export default function CapturePage() {
     if (!token || started.current) return;
     started.current = true;
     request('player:capture', { gameId: id, token, code: params.code })
-      .then(({ stolen, target }) => navigate(`/play/${id}`, { replace: true, state: { stolen: { words: stolen, target } } }))
+      .then(({ count, target }) => navigate(`/play/${id}`, { replace: true, state: { stolen: { count, target } } }))
       .catch((e) => navigate(`/play/${id}`, { replace: true, state: { captureError: e.message } }));
   }, [id, token, params.code, navigate]);
 

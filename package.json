@@ -5,14 +5,14 @@
   "description": "A party game: make other players say your word and steal theirs.",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n server,client -c magenta,cyan \"node --watch server/index.js\" \"vite\"",
-    "dev:https": "concurrently -k -n server,client -c magenta,cyan \"node --watch server/index.js\" \"vite --mode https\"",
+    "dev": "concurrently -k -n server,client -c magenta,cyan \"node --env-file-if-exists=.env --watch server/index.js\" \"vite\"",
+    "dev:https": "concurrently -k -n server,client -c magenta,cyan \"node --env-file-if-exists=.env --watch server/index.js\" \"vite --mode https\"",
     "build": "vite build",
-    "start": "node server/index.js",
+    "start": "node --env-file-if-exists=.env server/index.js",
     "test": "node --test server/"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.9"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

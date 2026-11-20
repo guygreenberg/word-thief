@@ -1,11 +1,12 @@
 import { GameError } from './game.js';
 
 const gameRoom = (gameId) => `game:${gameId}`;
+const adminRoom = (gameId) => `admin:${gameId}`;
 const playerRoom = (gameId, playerId) => `player:${gameId}:${playerId}`;
 // Bursts of changes (e.g. many steals at once in a 300-player game) are coalesced into one broadcast.
 const BROADCAST_INTERVAL_MS = 150;
 
-export function registerSocketHandlers(io, store) {
+export function registerSocketHandlers(io, store, auth) {
   const pending = new Map();
   const broadcast = (game) => {
     if (pending.has(game.id)) return;
@@ -14,6 +15,7 @@ export function registerSocketHandlers(io, store) {
       setTimeout(() => {
         pending.delete(game.id);
         io.to(gameRoom(game.id)).emit('state', store.publicState(game));
+        io.to(adminRoom(game.id)).emit('adminState', store.publicState(game, { admin: true }));
       }, BROADCAST_INTERVAL_MS),
     );
   };
@@ -21,6 +23,8 @@ export function registerSocketHandlers(io, store) {
   const brief = (p) => ({ id: p.id, name: p.name, avatar: p.avatar, color: p.color });
 
   io.on('connection', (socket) => {
+    // Behind a cloud proxy every socket shares the proxy's address, so prefer the forwarded client IP.
+    const clientId = String(socket.handshake.headers['x-forwarded-for'] ?? socket.handshake.address).split(',')[0].trim();
     const handle = (event, fn) =>
       socket.on(event, (payload, ack) => {
         if (typeof ack !== 'function') return;
@@ -44,7 +48,13 @@ export function registerSocketHandlers(io, store) {
 
     handle('game:create', () => {
       const game = store.createGame();
-      return { gameId: game.id, adminKey: game.adminKey };
+      return { gameId: game.id };
+    });
+
+    handle('admin:login', ({ gameId, username, password }) => {
+      const game = store.getGame(gameId);
+      auth.verify(clientId, username, password);
+      return { adminKey: game.adminKey };
     });
 
     handle('game:watch', ({ gameId }) => {
@@ -56,7 +66,8 @@ export function registerSocketHandlers(io, store) {
     handle('admin:watch', ({ gameId, adminKey }) => {
       const game = store.requireAdmin(gameId, adminKey);
       watch(game);
-      return { state: store.publicState(game) };
+      socket.join(adminRoom(game.id));
+      return { state: store.publicState(game, { admin: true }) };
     });
 
     handle('admin:start', ({ gameId, adminKey }) => {
@@ -121,8 +132,8 @@ export function registerSocketHandlers(io, store) {
       broadcast(game);
       sendMe(game, hunter);
       sendMe(game, target);
-      io.to(gameRoom(game.id)).emit('capture', { hunter: brief(hunter), target: brief(target), count: stolen.length });
-      return { stolen, target: brief(target), me: store.playerState(hunter) };
+      io.to(gameRoom(game.id)).emit('capture', { hunter: brief(hunter), target: brief(target) });
+      return { count: stolen.length, target: brief(target), me: store.playerState(hunter) };
     });
   });
 }

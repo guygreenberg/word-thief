@@ -87,7 +87,7 @@ export class GameStore {
 
   requireAdmin(gameId, adminKey) {
     const game = this.getGame(gameId);
-    if (!adminKey || adminKey !== game.adminKey) throw new GameError('Not authorized to manage this game');
+    if (!adminKey || adminKey !== game.adminKey) throw new GameError('Not authorized to manage this game', 'NOT_AUTHORIZED');
     return game;
   }
 
@@ -120,6 +120,7 @@ export class GameStore {
       id,
       token: secret(),
       code,
+      word: null,
       wrongCodes: [],
       name,
       avatar: pick(AVATARS),
@@ -130,6 +131,8 @@ export class GameStore {
       capturedById: null,
       eliminatedAt: null,
     };
+    // The dealt word is the only one a player ever sees; stolen words just add to their count.
+    player.word = player.words[0];
     game.players.set(id, player);
     this.#log(game, { type: 'join', player: id });
     return { game, player };
@@ -250,11 +253,16 @@ export class GameStore {
     for (const [id, game] of this.games) if (game.lastActivity < cutoff) this.games.delete(id);
   }
 
-  publicState(game) {
+  /**
+   * Shared game state. Word counts (and steal sizes) are only included for the host (`admin`) or once
+   * the game is over, so players and the public board can't tell who is leading.
+   */
+  publicState(game, { admin = false } = {}) {
     const players = [...game.players.values()];
     const nameOf = (id) => game.players.get(id)?.name ?? null;
     const winner = game.winnerId ? game.players.get(game.winnerId) : null;
     const finished = game.status === 'finished';
+    const showCounts = admin || finished;
     return {
       id: game.id,
       status: game.status,
@@ -270,14 +278,19 @@ export class GameStore {
         avatar: p.avatar,
         color: p.color,
         status: p.status,
-        wordCount: p.words.length,
+        wordCount: showCounts ? p.words.length : undefined,
         capturedBy: nameOf(p.capturedById),
         joinedAt: p.joinedAt,
         eliminatedAt: p.eliminatedAt,
         // Words stay secret until the game is over.
         words: finished ? p.words : undefined,
       })),
-      events: game.events.slice(-20).map((e) => ({ ...e, player: nameOf(e.player), target: nameOf(e.target) })),
+      events: game.events.slice(-20).map((e) => ({
+        ...e,
+        player: nameOf(e.player),
+        target: nameOf(e.target),
+        count: showCounts ? e.count : undefined,
+      })),
       winner: winner ? { id: winner.id, name: winner.name, avatar: winner.avatar, color: winner.color } : null,
     };
   }
@@ -289,7 +302,8 @@ export class GameStore {
       name: player.name,
       avatar: player.avatar,
       color: player.color,
-      words: player.words,
+      word: player.word,
+      wordCount: player.words.length,
       status: player.status,
       capturedById: player.capturedById,
     };

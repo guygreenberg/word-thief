@@ -4,22 +4,22 @@ A real-life party game played on phones. Every player gets a secret everyday wor
 players to **say your word out loud**, then scan their QR code to steal **all** their words.
 They're out. The last thief standing, holding every word in the game, wins.
 
-- **Host / admin**: web dashboard (laptop or phone) with a join QR, live leaderboard, undo, and end game.
-- **Presentation board**: full-screen view for a TV or projector showing who is still in and who is out (no word counts, so the room can't tell who is leading), steal animations, and a winner screen.
-- **Host score board**: host-only full-screen view with every player's word count, sorted from high to low.
-- **Players**: mobile web app (no install). Join by scanning a QR, see your secret words, scan a QR or type a code to steal, change your name, and rejoin by name if you lose the page.
+- **Game screen**: the laptop/TV view opened when a game is created. Shows the join QR, who is still in and who is out (no word counts, so the room can't tell who is leading), steal animations, and a winner screen. A **🔐 Admin** button leads to admin mode.
+- **Admin mode** (username + password): dashboard with the join QR, live leaderboard with word counts, start, undo, and end game, plus a full-screen **score board** with every player's word count, sorted from high to low.
+- **Players**: mobile web app (no install). Join by scanning a QR, see your one secret word and how many words you've stolen, scan a QR or type a code to steal, change your name, and rejoin by name if you lose the page. Other players' word counts are hidden until the game ends.
 - 3 to 300 players per game, real-time over WebSockets, with synthesized sound effects, confetti, and vibration.
 
 ## How a game runs
 
-1. Host opens the site and clicks **Host a new game**. The dashboard shows a join QR. Click
-   **Present board** to open the big-screen view.
+1. Host opens the site on a laptop and clicks **Host a new game**. The game screen shows a join QR.
+   Click **🔐 Admin** and log in to manage the game.
 2. Players scan the QR, enter a name, and get a random word plus their own player QR.
 3. Once 3 or more players have joined, the host clicks **Start game**.
 4. When player A makes player B say A's word, A tells B **secretly** (whisper or step aside) so the
    other players don't learn A's word. B taps **"I said their word…"** to show their QR and a short
    code, and A taps **"They said my word!"** to scan the QR or type the code. B's words move to A and
-   B is out. Scanning with the phone's normal camera app also works.
+   B is out. A keeps using only their original secret word; stolen words just raise A's count.
+   Scanning with the phone's normal camera app also works.
 5. The game ends automatically when one player holds every word. The host can also end it early;
    the player with the most words wins.
 
@@ -43,15 +43,20 @@ and a separate 6-character **capture code** shown in their QR and on the "I said
 Public IDs shown on the board can't be used to steal, and wrong codes are rate-limited (8 per minute)
 to stop guessing. Words stay hidden from everyone else until the game ends. Rejoining needs only the
 player's name, which keeps it easy at a party but means anyone who knows a name can take over that
-player; the host sees every rejoin in the live feed. The admin key is kept in
-localStorage. **Copy admin link** lets the host open the dashboard on another device.
+player; the host sees every rejoin in the live feed. Word counts are only sent to admin screens
+until the game ends.
+
+Admin mode uses one username and password for all games, read from the `ADMIN_USERNAME` and
+`ADMIN_PASSWORD` environment variables (never commit them). Failed logins are rate-limited (5 per
+minute). After logging in, the device remembers admin access for that game until **Exit admin mode**.
 
 ## Run locally
 
-Requires Node.js 20+.
+Requires Node.js 22.9+.
 
 ```bash
 npm install
+cp .env.example .env # then set ADMIN_PASSWORD in .env (git-ignored)
 npm run dev          # server on :3001 + Vite on http://localhost:5173
 npm test             # game-rule tests
 ```
@@ -72,8 +77,10 @@ The app is a single container (`Dockerfile`) that serves both the UI and the Web
 Any host with WebSocket support and HTTPS works:
 
 - **Render**: push to GitHub, then *New + → Blueprint* and pick the repo (uses `render.yaml`).
+  Render asks for `ADMIN_PASSWORD` when the Blueprint is created.
 - **Railway / Fly.io / Google Cloud Run / Azure Container Apps**: deploy the `Dockerfile`; the app
-  listens on `$PORT`. On Cloud Run, enable session affinity.
+  listens on `$PORT`. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` as environment variables. On Cloud
+  Run, enable session affinity.
 
 Keep it to **one instance**: game state is held in memory, so games are lost on restart and can't be
 shared across replicas. Games are cleaned up after 12 hours of inactivity. To scale out or survive

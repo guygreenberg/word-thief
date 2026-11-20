@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Logo, MuteButton, useToast } from '../components/ui.jsx';
 import { play } from '../effects.js';
 import { request } from '../socket.js';
-import { storage } from '../storage.js';
 
 const STEPS = [
   ['📱', 'Scan & join', 'Scan the QR on the big screen, type your name and get a secret word.'],
@@ -22,10 +21,9 @@ export default function HomePage() {
   async function hostGame() {
     setCreating(true);
     try {
-      const { gameId, adminKey } = await request('game:create');
-      storage.setAdminKey(gameId, adminKey);
+      const { gameId } = await request('game:create');
       play('pop');
-      navigate(`/admin/${gameId}`);
+      navigate(`/board/${gameId}`);
     } catch (e) {
       toast({ emoji: '😬', text: e.message, tone: 'error' });
       setCreating(false);
@@ -52,7 +50,7 @@ export default function HomePage() {
       <section className="home-actions">
         <div className="card">
           <h3>🎤 Hosting a party?</h3>
-          <p className="muted">Create a game and put the join QR on a big screen.</p>
+          <p className="muted">Create a game and put the join QR on a big screen. Use the 🔐 Admin button there to run it.</p>
           <button type="button" className="btn btn-primary btn-lg" onClick={hostGame} disabled={creating}>
             {creating ? 'Creating…' : '✨ Host a new game'}
           </button>

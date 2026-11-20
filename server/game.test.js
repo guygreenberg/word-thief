@@ -125,19 +125,42 @@ describe('ending early', () => {
 });
 
 describe('public state', () => {
-  it('hides words and secrets until the game is finished', () => {
+  it('hides secrets, words and word counts from players until the game is finished', () => {
     const { store, game, players } = setup();
     store.startGame(game.id, game.adminKey);
-    const json = JSON.stringify(store.publicState(game));
+    store.capture(game.id, players.Alice.token, players.Bob.code);
+    const pub = store.publicState(game);
+    const json = JSON.stringify(pub);
     for (const p of Object.values(players)) {
       assert.ok(!json.includes(p.token));
       assert.ok(!json.includes(p.code));
-      assert.ok(!json.includes(`"${p.words[0]}"`));
+      assert.ok(!json.includes(`"${p.words[0] ?? p.word}"`));
     }
-    store.capture(game.id, players.Alice.token, players.Bob.code);
+    assert.ok(pub.players.every((p) => p.wordCount === undefined));
+    assert.equal(pub.events.find((e) => e.type === 'capture').count, undefined);
+
+    const admin = store.publicState(game, { admin: true });
+    assert.equal(admin.players.find((p) => p.id === players.Alice.id).wordCount, 2);
+    assert.equal(admin.events.find((e) => e.type === 'capture').count, 1);
+
     store.capture(game.id, players.Alice.token, players.Carol.code);
     const winner = store.publicState(game).players.find((p) => p.id === players.Alice.id);
+    assert.equal(winner.wordCount, 3);
     assert.equal(winner.words.length, 3);
+  });
+});
+
+describe('player state', () => {
+  it('keeps showing only the original word after stealing, plus the total count', () => {
+    const { store, game, players } = setup();
+    const original = players.Alice.words[0];
+    store.startGame(game.id, game.adminKey);
+    store.capture(game.id, players.Alice.token, players.Bob.code);
+    const me = store.playerState(players.Alice);
+    assert.equal(me.word, original);
+    assert.equal(me.wordCount, 2);
+    assert.equal(me.words, undefined);
+    assert.ok(!JSON.stringify(me).includes(players.Bob.word));
   });
 });
 

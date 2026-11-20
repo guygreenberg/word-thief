@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { setMuted } from '../effects.js';
 import { formatDuration, plural, rankPlayers, useConnected, useMuted, useNow } from '../hooks.js';
 import { isLocalOnlyHost } from '../links.js';
+import { request } from '../socket.js';
 
 export function Logo({ size = 'md', to = '/' }) {
   return (
@@ -95,8 +96,11 @@ export function StatusPill({ status }) {
   );
 }
 
-export function Leaderboard({ players, highlightId, limit, showWords = false, columns = false }) {
-  const ranked = rankPlayers(players);
+/** Ranked by word count when `showCounts`; otherwise just who is in or out, alphabetically, revealing nothing. */
+export function Leaderboard({ players, highlightId, limit, showWords = false, columns = false, showCounts = true }) {
+  const ranked = showCounts
+    ? rankPlayers(players)
+    : [...players].sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'active' ? -1 : 1));
   const shown = limit ? ranked.slice(0, limit) : ranked;
   const max = Math.max(1, ...players.map((p) => p.wordCount));
   return (
@@ -105,7 +109,7 @@ export function Leaderboard({ players, highlightId, limit, showWords = false, co
         const out = p.status === 'out';
         return (
           <li key={p.id} className={`lb-row ${out ? 'lb-out' : ''} ${p.id === highlightId ? 'lb-me' : ''}`}>
-            <span className="lb-rank">{out ? '💀' : ['🥇', '🥈', '🥉'][i] ?? i + 1}</span>
+            <span className="lb-rank">{out ? '💀' : showCounts ? (['🥇', '🥈', '🥉'][i] ?? i + 1) : '🦹'}</span>
             <Avatar player={p} size={36} ghost={out} />
             <span className="lb-main">
               <span className="lb-name">
@@ -114,6 +118,8 @@ export function Leaderboard({ players, highlightId, limit, showWords = false, co
               </span>
               {out ? (
                 <span className="lb-sub">caught by {p.capturedBy ?? '???'}</span>
+              ) : !showCounts ? (
+                <span className="lb-sub">still in</span>
               ) : (
                 <span className="lb-bar">
                   <span style={{ width: `${(p.wordCount / max) * 100}%`, background: p.color }} />
@@ -121,7 +127,7 @@ export function Leaderboard({ players, highlightId, limit, showWords = false, co
               )}
               {showWords && p.words?.length > 0 && <span className="lb-sub">{p.words.join(' · ')}</span>}
             </span>
-            {!out && <span className="lb-count">{plural(p.wordCount, 'word')}</span>}
+            {!out && showCounts && <span className="lb-count">{plural(p.wordCount, 'word')}</span>}
           </li>
         );
       })}
@@ -164,6 +170,50 @@ function EventText({ event: e }) {
     default:
       return null;
   }
+}
+
+export function AdminLogin({ gameId, onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const { adminKey } = await request('admin:login', { gameId, username, password });
+      onLogin(adminKey);
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="page center">
+      <header className="topbar">
+        <Logo size="sm" />
+      </header>
+      <form className="card narrow text-center pop-in" onSubmit={submit}>
+        <div className="big-emoji">🔐</div>
+        <h2>Admin mode</h2>
+        <p className="muted">Game #{gameId}. Log in to manage the game.</p>
+        <label className="label" htmlFor="admin-user">Username</label>
+        <input id="admin-user" className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" autoFocus required />
+        <label className="label" htmlFor="admin-pass">Password</label>
+        <input id="admin-pass" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+        {error && <p className="error-text">{error}</p>}
+        <button type="submit" className="btn btn-primary btn-lg btn-block spaced" disabled={busy}>
+          {busy ? 'Checking…' : 'Log in'}
+        </button>
+        <Link className="btn btn-ghost btn-block spaced" to={`/board/${gameId}`}>
+          ← Back to the game screen
+        </Link>
+      </form>
+    </div>
+  );
 }
 
 export function Modal({ children, onClose, className = '' }) {

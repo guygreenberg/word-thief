@@ -4,6 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
+import { AdminAuth } from './auth.js';
 import { GameStore } from './game.js';
 import { registerSocketHandlers } from './sockets.js';
 
@@ -14,8 +15,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 10_000 });
 const store = new GameStore();
+const auth = new AdminAuth({ username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD });
+if (!auth.configured) console.warn('⚠️  ADMIN_USERNAME / ADMIN_PASSWORD are not set: nobody can open admin mode.');
 
-registerSocketHandlers(io, store);
+registerSocketHandlers(io, store, auth);
 setInterval(() => store.cleanup(), 10 * 60 * 1000).unref();
 
 app.get('/healthz', (_req, res) => res.json({ ok: true, games: store.games.size }));

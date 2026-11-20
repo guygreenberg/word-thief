@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Avatar, Elapsed, FullPageMessage, LocalhostWarning, Logo, MuteButton, QR } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
 import { plural, rankPlayers, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
@@ -39,6 +39,9 @@ export default function BoardPage() {
           <span className="pill pill-code">#{id}</span>
           <Elapsed state={state} />
           <MuteButton />
+          <Link className="btn btn-sm btn-ghost" to={`/admin/${id}`} title="Admin mode (login required)">
+            🔐 Admin
+          </Link>
           <button
             type="button"
             className="icon-btn"

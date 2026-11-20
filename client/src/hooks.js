@@ -13,13 +13,14 @@ export function useSocketEvent(event, handler) {
   }, [event]);
 }
 
-/** Live public game state for the board and admin screens. */
+/** Live game state. With an admin key it is the host view, which includes word counts. */
 export function useGameWatch(gameId, adminKey) {
   const [state, setState] = useState(null);
   const [error, setError] = useState(null);
+  const [errorCode, setErrorCode] = useState(null);
   const id = gameId.toUpperCase();
 
-  useSocketEvent('state', (s) => s.id === id && setState(s));
+  useSocketEvent(adminKey ? 'adminState' : 'state', (s) => s.id === id && setState(s));
   useEffect(
     () =>
       onEveryConnect(() =>
@@ -27,25 +28,26 @@ export function useGameWatch(gameId, adminKey) {
           .then((res) => {
             setState(res.state);
             setError(null);
+            setErrorCode(null);
           })
-          .catch((e) => setError(e.message)),
+          .catch((e) => {
+            setError(e.message);
+            setErrorCode(e.code ?? null);
+          }),
       ),
     [id, adminKey],
   );
-  return { state, error };
+  return { state, error, errorCode };
 }
 
-/** Admin key from the `#key=` link fragment (saved for later) or from this device's storage. */
+/** Admin key for this game, obtained by logging in and remembered on this device. */
 export function useAdminKey(gameId) {
-  const [adminKey] = useState(() => {
-    const fromHash = new URLSearchParams(window.location.hash.slice(1)).get('key');
-    if (fromHash) {
-      storage.setAdminKey(gameId, fromHash);
-      window.history.replaceState(null, '', window.location.pathname);
-    }
-    return fromHash || storage.getAdminKey(gameId);
-  });
-  return adminKey;
+  const [adminKey, setAdminKeyState] = useState(() => storage.getAdminKey(gameId));
+  const setAdminKey = (key) => {
+    storage.setAdminKey(gameId, key);
+    setAdminKeyState(key);
+  };
+  return [adminKey, setAdminKey];
 }
 
 export function useConnected() {

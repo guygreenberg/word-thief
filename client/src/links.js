@@ -5,7 +5,6 @@ export const isLocalOnlyHost = () => ['localhost', '127.0.0.1', '[::1]'].include
 export const joinUrl = (gameId) => `${origin()}/join/${gameId}`;
 export const boardPath = (gameId) => `/board/${gameId}`;
 export const adminBoardPath = (gameId) => `/admin/${gameId}/board`;
-export const adminUrl = (gameId, adminKey) => `${origin()}/admin/${gameId}#key=${encodeURIComponent(adminKey)}`;
 export const playerQrValue = (gameId, code) => `${origin()}/c/${gameId}/${encodeURIComponent(code)}`;
 
 /** Extracts the player capture code from a scanned QR, or throws a friendly error. */

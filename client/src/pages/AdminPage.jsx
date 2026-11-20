@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  AdminLogin,
   Avatar,
   Elapsed,
   EventFeed,
@@ -15,33 +16,30 @@ import {
 } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
 import { plural, useAdminKey, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
-import { adminBoardPath, adminUrl, boardPath, joinUrl } from '../links.js';
+import { adminBoardPath, boardPath, joinUrl } from '../links.js';
 import { request } from '../socket.js';
 
 export default function AdminPage() {
   const id = useParams().gameId.toUpperCase();
-  const adminKey = useAdminKey(id);
-  if (!adminKey) {
-    return (
-      <FullPageMessage emoji="🔒" title="Host access needed">
-        <p>Open the admin link from the device that created this game.</p>
-        <a className="btn btn-primary" href="/">Go home</a>
-      </FullPageMessage>
-    );
-  }
-  return <AdminDashboard id={id} adminKey={adminKey} />;
+  const [adminKey, setAdminKey] = useAdminKey(id);
+  if (!adminKey) return <AdminLogin gameId={id} onLogin={setAdminKey} />;
+  return <AdminDashboard id={id} adminKey={adminKey} onLogout={() => setAdminKey(null)} />;
 }
 
-function AdminDashboard({ id, adminKey }) {
+function AdminDashboard({ id, adminKey, onLogout }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const { state, error } = useGameWatch(id, adminKey);
+  const { state, error, errorCode } = useGameWatch(id, adminKey);
   const [busy, setBusy] = useState(false);
 
+  // A stale key (e.g. after a server restart) sends the host back to the login form.
+  useEffect(() => {
+    if (errorCode === 'NOT_AUTHORIZED') onLogout();
+  }, [errorCode, onLogout]);
   useSocketEvent('joined', () => play('pop'));
-  useSocketEvent('capture', ({ hunter, target, count }) => {
+  useSocketEvent('capture', ({ hunter, target }) => {
     play('steal');
-    toast({ emoji: '🦹', text: `${hunter.name} stole ${plural(count, 'word')} from ${target.name}!` });
+    toast({ emoji: '🦹', text: `${hunter.name} caught ${target.name}!` });
   });
   useChange(state?.status, (prev, next) => {
     if (prev === 'lobby' && next === 'active') play('start');
@@ -71,15 +69,6 @@ function AdminDashboard({ id, adminKey }) {
       toast({ emoji: '😬', text: e.message, tone: 'error' });
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function copyAdminLink() {
-    try {
-      await navigator.clipboard.writeText(adminUrl(id, adminKey));
-      toast({ emoji: '📋', text: 'Admin link copied. Keep it secret!' });
-    } catch {
-      window.prompt('Copy this admin link:', adminUrl(id, adminKey));
     }
   }
 
@@ -142,8 +131,15 @@ function AdminDashboard({ id, adminKey }) {
             ✨ New game
           </button>
         )}
-        <button type="button" className="btn btn-ghost" onClick={copyAdminLink}>
-          🔑 Copy admin link
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => {
+            navigate(boardPath(id));
+            onLogout();
+          }}
+        >
+          🚪 Exit admin mode
         </button>
       </div>
 

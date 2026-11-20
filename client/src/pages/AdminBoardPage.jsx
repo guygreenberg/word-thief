@@ -1,29 +1,27 @@
+import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Avatar, Elapsed, FullPageMessage, Leaderboard, Logo, MuteButton, StatusPill, useToast } from '../components/ui.jsx';
+import { AdminLogin, Avatar, Elapsed, FullPageMessage, Leaderboard, Logo, MuteButton, StatusPill, useToast } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
 import { plural, rankPlayers, useAdminKey, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
 
 /** Host-only scoreboard with word counts. The public board deliberately hides counts. */
 export default function AdminBoardPage() {
   const id = useParams().gameId.toUpperCase();
-  const adminKey = useAdminKey(id);
-  if (!adminKey) {
-    return (
-      <FullPageMessage emoji="🔒" title="Host access needed">
-        <p>Open the score board from the host dashboard.</p>
-      </FullPageMessage>
-    );
-  }
-  return <AdminBoard id={id} adminKey={adminKey} />;
+  const [adminKey, setAdminKey] = useAdminKey(id);
+  if (!adminKey) return <AdminLogin gameId={id} onLogin={setAdminKey} />;
+  return <AdminBoard id={id} adminKey={adminKey} onLogout={() => setAdminKey(null)} />;
 }
 
-function AdminBoard({ id, adminKey }) {
-  const { state, error } = useGameWatch(id, adminKey);
+function AdminBoard({ id, adminKey, onLogout }) {
+  const { state, error, errorCode } = useGameWatch(id, adminKey);
   const toast = useToast();
 
-  useSocketEvent('capture', ({ hunter, target, count }) => {
+  useEffect(() => {
+    if (errorCode === 'NOT_AUTHORIZED') onLogout();
+  }, [errorCode, onLogout]);
+  useSocketEvent('capture', ({ hunter, target }) => {
     play('steal');
-    toast({ emoji: '🦹', text: `${hunter.name} stole ${plural(count, 'word')} from ${target.name}!` });
+    toast({ emoji: '🦹', text: `${hunter.name} caught ${target.name}!` });
   });
   useChange(state?.status, (prev, next) => {
     if (prev === 'active' && next === 'finished') {
