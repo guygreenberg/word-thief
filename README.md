@@ -20,8 +20,13 @@ They're out. The last thief standing, holding every word in the game, wins.
    code, and A taps **"They said my word!"** to scan the QR or type the code. B's words move to A and
    B is out. A keeps using only their original secret word; stolen words just raise A's count.
    Scanning with the phone's normal camera app also works.
-5. The game ends automatically when one player holds every word. The host can also end it early;
-   the player with the most words wins.
+5. The game ends automatically when one player holds every word, or when its **end time** is reached
+   (2 weeks after creation by default; the host can change it per game in admin mode). The host can
+   also end it early. When it ends early, the player holding the most words wins (a tie has no winner).
+   The game screen and every phone show a countdown to the end time.
+6. When the game is over, the game screen and phones show the final standings: every player's words
+   stolen over the whole game (even if they were caught later), sorted high to low, with medals for the
+   top three scores.
 
 The host can **undo the last steal** (for disputes or mis-scans) and remove players before the game starts.
 
@@ -96,5 +101,5 @@ unprivileged `node` user. With a disk, Render can't do zero-downtime deploys, so
 disconnects players (they reconnect automatically); avoid deploying mid-game.
 
 Keep it to **one instance**: live game state is held in memory (the disk is a backup), so it can't be
-shared across replicas. Games are cleaned up after 12 hours of inactivity. To scale out later, move
+shared across replicas. Games are deleted 12 hours after they end. To scale out later, move
 `GameStore` to Redis and add the Socket.io Redis adapter.

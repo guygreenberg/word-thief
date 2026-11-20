@@ -3,7 +3,7 @@ import QrScanner from 'qr-scanner';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { setMuted } from '../effects.js';
-import { formatDuration, plural, rankPlayers, useConnected, useMuted, useNow } from '../hooks.js';
+import { formatDuration, formatTimeLeft, plural, rankPlayers, useConnected, useMuted, useNow } from '../hooks.js';
 import { isLocalOnlyHost } from '../links.js';
 import { request } from '../socket.js';
 
@@ -80,6 +80,53 @@ export function Elapsed({ state }) {
   const now = useNow();
   if (!state.startedAt) return null;
   return <span className="pill pill-dark">⏱ {formatDuration((state.endedAt ?? now) - state.startedAt)}</span>;
+}
+
+/** Countdown to the game's end time; hidden once the game is over. */
+export function TimeLeft({ state, big = false }) {
+  const now = useNow();
+  if (state.status === 'finished' || !state.endsAt) return null;
+  const left = state.endsAt - now;
+  const urgent = left < 60 * 60 * 1000;
+  return (
+    <span
+      className={`pill ${urgent ? 'pill-urgent' : 'pill-dark'} ${big ? 'pill-big' : ''}`}
+      title={`Ends ${new Date(state.endsAt).toLocaleString()}`}
+    >
+      ⏳ {left > 0 ? `${formatTimeLeft(left)} left` : "Time's up!"}
+    </span>
+  );
+}
+
+/**
+ * Final ranking by words stolen over the whole game. The top three distinct scores get medals
+ * (ties share a medal); nobody gets a medal for stealing nothing.
+ */
+export function FinalStandings({ state, highlightId }) {
+  const ranked = [...state.players].sort((a, b) => b.stolenCount - a.stolenCount || a.name.localeCompare(b.name));
+  const topScores = [...new Set(ranked.map((p) => p.stolenCount).filter((n) => n > 0))].slice(0, 3);
+  return (
+    <ol className="standings">
+      {ranked.map((p) => {
+        const place = topScores.indexOf(p.stolenCount);
+        return (
+          <li key={p.id} className={`standing ${place >= 0 ? `standing-top standing-${place + 1}` : ''} ${p.id === highlightId ? 'lb-me' : ''}`}>
+            <span className="standing-medal">{place >= 0 ? ['🥇', '🥈', '🥉'][place] : ''}</span>
+            <Avatar player={p} size={40} />
+            <span className="standing-name">
+              {p.name}
+              {p.id === state.winner?.id && ' 👑'}
+              {p.id === highlightId && <em> (you)</em>}
+            </span>
+            <span className="standing-score">
+              {p.stolenCount}
+              <small>stolen</small>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 export function StatusPill({ status }) {
@@ -165,8 +212,15 @@ function EventText({ event: e }) {
       return <span>🦹 <b>{e.player}</b> stole {plural(e.count, 'word')} from <b>{e.target}</b></span>;
     case 'undo':
       return <span>↩️ Host undid <b>{e.player}</b>'s steal from <b>{e.target}</b></span>;
+    case 'deadline':
+      return <span>⏰ Host set the end time to <b>{new Date(e.endsAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</b></span>;
     case 'finish':
-      return e.player ? <span>🏆 <b>{e.player}</b> won!</span> : <span>🏁 Game ended</span>;
+      return (
+        <span>
+          {e.reason === 'time' ? "⏰ Time's up! " : ''}
+          {e.player ? <>🏆 <b>{e.player}</b> won!</> : '🏁 Game ended'}
+        </span>
+      );
     default:
       return null;
   }

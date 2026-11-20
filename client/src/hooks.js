@@ -97,6 +97,18 @@ export function formatDuration(ms) {
   return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
 
+/** Compact countdown: "13d 4h", "5h 12m", "12m 30s". */
+export function formatTimeLeft(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
 export const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 
 export function rankPlayers(players) {

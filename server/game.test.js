@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { AVATARS, CAPTURE_CODE_LENGTH, GameError, GameStore, MAX_PLAYERS, MAX_WRONG_CODES_PER_MINUTE } from './game.js';
+import { AVATARS, CAPTURE_CODE_LENGTH, DEFAULT_GAME_DURATION_MS, GAME_TTL_MS, GameError, GameStore, MAX_PLAYERS, MAX_WRONG_CODES_PER_MINUTE } from './game.js';
 import { AVATAR_CHOICES } from '../client/src/constants.js';
 import { ALL_WORDS } from './words.js';
 
@@ -116,7 +116,7 @@ describe('ending early', () => {
     store.capture(game.id, players.A.token, players.B.code);
     store.endGame(game.id);
     assert.equal(game.winnerId, players.A.id);
-    assert.throws(() => store.undoLastCapture(game.id), /ended by the host/);
+    assert.throws(() => store.undoLastCapture(game.id), /ended early/);
 
     const tie = setup();
     tie.store.startGame(tie.game.id);
@@ -250,5 +250,69 @@ describe('changing avatar', () => {
 
   it('offers players exactly the avatars the server accepts', () => {
     assert.deepEqual(AVATAR_CHOICES, AVATARS);
+  });
+});
+
+describe('final scores', () => {
+  it('counts every word a player stole, even if they were caught later', () => {
+    const { store, game, players } = setup(['A', 'B', 'C', 'D']);
+    store.startGame(game.id);
+    store.capture(game.id, players.B.token, players.A.code);
+    store.capture(game.id, players.C.token, players.B.code);
+    store.endGame(game.id);
+    const stolen = Object.fromEntries(store.publicState(game).players.map((p) => [p.name, p.stolenCount]));
+    assert.deepEqual(stolen, { A: 0, B: 1, C: 2, D: 0 });
+    assert.equal(store.publicState(game, { admin: false }).players[0].stolenCount, 0);
+  });
+
+  it('hides stolen counts from players while the game is running', () => {
+    const { store, game, players } = setup();
+    store.startGame(game.id);
+    store.capture(game.id, players.Alice.token, players.Bob.code);
+    assert.ok(store.publicState(game).players.every((p) => p.stolenCount === undefined));
+    assert.equal(store.publicState(game, { admin: true }).players.find((p) => p.name === 'Alice').stolenCount, 1);
+  });
+});
+
+describe('game end time', () => {
+  it('defaults to two weeks and can be changed by the host to a future time', () => {
+    let now = 1_000_000;
+    const store = new GameStore({ now: () => now });
+    const game = store.createGame();
+    assert.equal(game.endsAt, now + DEFAULT_GAME_DURATION_MS);
+    store.setEndsAt(game.id, now + 60_000);
+    assert.equal(store.publicState(game).endsAt, now + 60_000);
+    assert.throws(() => store.setEndsAt(game.id, now - 1), /in the future/);
+    assert.throws(() => store.setEndsAt(game.id, 'soon'), /in the future/);
+  });
+
+  it('ends the game when time is up: most words wins, and it cannot be undone', () => {
+    let now = 1_000_000;
+    const store = new GameStore({ now: () => now });
+    const game = store.createGame();
+    const [a, b] = ['A', 'B', 'C'].map((n) => store.joinGame(game.id, n).player);
+    store.startGame(game.id);
+    store.capture(game.id, a.token, b.code);
+    assert.deepEqual(store.expireDueGames(), []);
+
+    now = game.endsAt;
+    assert.deepEqual(store.expireDueGames(), [game]);
+    assert.equal(game.status, 'finished');
+    assert.equal(game.winnerId, a.id);
+    assert.equal(game.events.at(-1).reason, 'time');
+    assert.throws(() => store.undoLastCapture(game.id), /ended early/);
+    assert.throws(() => store.setEndsAt(game.id, now + 1000), /already over/);
+  });
+
+  it('keeps long games around until 12 hours after they end', () => {
+    let now = 1_000_000;
+    const store = new GameStore({ now: () => now });
+    const game = store.createGame();
+    now += 3 * 24 * 60 * 60 * 1000; // idle for days, but still before its end time
+    store.cleanup();
+    assert.ok(store.games.has(game.id));
+    now = game.endsAt + GAME_TTL_MS + 1;
+    store.cleanup();
+    assert.ok(!store.games.has(game.id));
   });
 });

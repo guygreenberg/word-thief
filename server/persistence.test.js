@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { GAME_TTL_MS, GameStore } from './game.js';
+import { DEFAULT_GAME_DURATION_MS, GAME_TTL_MS, GameStore } from './game.js';
 import { FileGamePersistence } from './persistence.js';
 
 let dir;
@@ -40,7 +40,7 @@ describe('saving games to disk', () => {
     store.createGame();
     store.flush();
 
-    now += GAME_TTL_MS + 1;
+    now += DEFAULT_GAME_DURATION_MS + GAME_TTL_MS + 1;
     const restarted = new GameStore({ now: () => now, persistence: new FileGamePersistence(dir) });
     assert.equal(restarted.restore(), 0);
     assert.deepEqual(readdirSync(path.join(dir, 'games')), []);
@@ -61,7 +61,10 @@ describe('saving games to disk', () => {
   it('deletes the file when a game is cleaned up', () => {
     let now = 1_000_000;
     const store = new GameStore({ now: () => now, persistence: new FileGamePersistence(dir) });
-    store.createGame();
+    const game = store.createGame();
+    ['A', 'B', 'C'].forEach((n) => store.joinGame(game.id, n));
+    store.startGame(game.id);
+    store.endGame(game.id);
     store.flush();
     now += GAME_TTL_MS + 1;
     store.cleanup();

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { AdminLogin, Avatar, Elapsed, FullPageMessage, Leaderboard, Logo, MuteButton, StatusPill, useToast } from '../components/ui.jsx';
+import { AdminLogin, Avatar, Elapsed, TimeLeft, FullPageMessage, Leaderboard, Logo, MuteButton, StatusPill, useToast } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
 import { plural, rankPlayers, useAdminKey, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
 
@@ -45,6 +45,7 @@ function AdminBoard({ id, adminKey, onLogout }) {
           <span className="pill pill-dark">🔒 Host only</span>
           <span className="pill pill-code">#{id}</span>
           <StatusPill status={state.status} />
+          <TimeLeft state={state} />
           <Elapsed state={state} />
           <MuteButton />
         </div>

@@ -22,6 +22,9 @@ export function registerSocketHandlers(io, store, auth) {
   const sendMe = (game, player) => io.to(playerRoom(game.id, player.id)).emit('me', store.playerState(player));
   const brief = (p) => ({ id: p.id, name: p.name, avatar: p.avatar, color: p.color });
 
+  // End games whose time is up and tell everyone watching them.
+  setInterval(() => store.expireDueGames().forEach(broadcast), 2_000).unref();
+
   io.on('connection', (socket) => {
     // Behind a cloud proxy every socket shares the proxy's address, so prefer the forwarded client IP.
     const clientId = String(socket.handshake.headers['x-forwarded-for'] ?? socket.handshake.address).split(',')[0].trim();
@@ -99,6 +102,13 @@ export function registerSocketHandlers(io, store, auth) {
       sendMe(game, hunter);
       sendMe(game, target);
       io.to(gameRoom(game.id)).emit('undo', { hunter: brief(hunter), target: brief(target) });
+      return {};
+    });
+
+    handle('admin:setEndsAt', ({ gameId, adminKey, endsAt }) => {
+      auth.requireSession(adminKey);
+      const game = store.setEndsAt(gameId, endsAt);
+      broadcast(game);
       return {};
     });
 

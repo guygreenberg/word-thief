@@ -8,7 +8,10 @@ export const CAPTURE_CODE_LENGTH = 6;
 // Short typed capture codes are guessable in theory, so wrong guesses are rate limited per player.
 export const MAX_WRONG_CODES_PER_MINUTE = 8;
 const MAX_EVENTS = 50;
+// Games are kept this long after they end (or after their end time), then deleted.
 export const GAME_TTL_MS = 12 * 60 * 60 * 1000;
+export const DEFAULT_GAME_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+const MAX_GAME_DURATION_MS = 365 * 24 * 60 * 60 * 1000;
 // Changed games are written to storage in batches, so a burst of steals becomes one write per game.
 const SAVE_DELAY_MS = 200;
 const SAVE_RETRY_MS = 5000;
@@ -67,13 +70,13 @@ export class GameStore {
   /** Reloads saved games on startup, dropping ones that expired while the server was down. */
   restore() {
     if (!this.persistence) return 0;
-    const cutoff = this.now() - GAME_TTL_MS;
     for (const data of this.persistence.loadAll()) {
-      if (data.lastActivity < cutoff) {
-        this.persistence.remove(data.id);
+      const game = deserializeGame(data);
+      if (isExpired(game, this.now())) {
+        this.persistence.remove(game.id);
         continue;
       }
-      this.games.set(data.id, deserializeGame(data));
+      this.games.set(game.id, game);
     }
     return this.games.size;
   }
@@ -109,6 +112,7 @@ export class GameStore {
           startedAt: g.startedAt,
           endedAt: g.endedAt,
           lastActivity: g.lastActivity,
+          endsAt: g.endsAt,
           playerCount: players.length,
           activeCount: players.filter((p) => p.status === 'active').length,
           winner: g.winnerId ? g.players.get(g.winnerId)?.name ?? null : null,
@@ -124,8 +128,10 @@ export class GameStore {
       id,
       status: 'lobby',
       createdAt: this.now(),
+      endsAt: this.now() + DEFAULT_GAME_DURATION_MS,
       startedAt: null,
       endedAt: null,
+      // True when the game was ended early (by the host or when time ran out); such endings can't be undone.
       endedByAdmin: false,
       winnerId: null,
       players: new Map(),
@@ -281,7 +287,7 @@ export class GameStore {
 
   undoLastCapture(gameId) {
     const game = this.getGame(gameId);
-    if (game.endedByAdmin) throw new GameError('The game was ended by the host and cannot be undone');
+    if (game.endedByAdmin) throw new GameError('The game was ended early (by the host or time) and cannot be undone');
     const last = game.captures.pop();
     if (!last) throw new GameError('Nothing to undo');
     const hunter = game.players.get(last.hunterId);
@@ -304,17 +310,32 @@ export class GameStore {
   endGame(gameId) {
     const game = this.getGame(gameId);
     if (game.status === 'finished') throw new GameError('The game is already over');
-    const ranked = [...game.players.values()].sort((a, b) => b.words.length - a.words.length);
-    const isTie = ranked.length > 1 && ranked[0].words.length === ranked[1].words.length;
-    game.endedByAdmin = true;
-    this.#finish(game, ranked.length && !isTie ? ranked[0].id : null);
+    this.#endEarly(game, 'host');
     return game;
   }
 
+  /** Host changes when the game ends. `endsAt` is a timestamp in milliseconds. */
+  setEndsAt(gameId, endsAt) {
+    const game = this.getGame(gameId);
+    if (game.status === 'finished') throw new GameError('The game is already over');
+    const when = Number(endsAt);
+    if (!Number.isFinite(when) || when <= this.now()) throw new GameError('Pick an end time in the future');
+    if (when > this.now() + MAX_GAME_DURATION_MS) throw new GameError('A game can last at most one year');
+    game.endsAt = when;
+    this.#log(game, { type: 'deadline', endsAt: when });
+    return game;
+  }
+
+  /** Ends every game whose end time has passed. Returns those games so they can be broadcast. */
+  expireDueGames() {
+    const due = [...this.games.values()].filter((g) => g.status !== 'finished' && g.endsAt <= this.now());
+    for (const game of due) this.#endEarly(game, 'time');
+    return due;
+  }
+
   cleanup() {
-    const cutoff = this.now() - GAME_TTL_MS;
     for (const [id, game] of this.games) {
-      if (game.lastActivity >= cutoff) continue;
+      if (!isExpired(game, this.now())) continue;
       this.games.delete(id);
       this.#markDirty(id);
     }
@@ -330,6 +351,7 @@ export class GameStore {
     const winner = game.winnerId ? game.players.get(game.winnerId) : null;
     const finished = game.status === 'finished';
     const showCounts = admin || finished;
+    const stolen = showCounts ? stolenCounts(game) : null;
     return {
       id: game.id,
       status: game.status,
@@ -338,6 +360,7 @@ export class GameStore {
       createdAt: game.createdAt,
       startedAt: game.startedAt,
       endedAt: game.endedAt,
+      endsAt: game.endsAt,
       canUndo: game.captures.length > 0 && !game.endedByAdmin,
       players: players.map((p) => ({
         id: p.id,
@@ -346,6 +369,7 @@ export class GameStore {
         color: p.color,
         status: p.status,
         wordCount: showCounts ? p.words.length : undefined,
+        stolenCount: showCounts ? (stolen.get(p.id) ?? 0) : undefined,
         capturedBy: nameOf(p.capturedById),
         joinedAt: p.joinedAt,
         eliminatedAt: p.eliminatedAt,
@@ -376,11 +400,19 @@ export class GameStore {
     };
   }
 
-  #finish(game, winnerId) {
+  #finish(game, winnerId, reason = 'captured') {
     game.status = 'finished';
     game.endedAt = this.now();
     game.winnerId = winnerId;
-    this.#log(game, { type: 'finish', player: winnerId });
+    this.#log(game, { type: 'finish', player: winnerId, reason });
+  }
+
+  /** Ends before one player holds every word: whoever holds the most words wins, a tie has no winner. */
+  #endEarly(game, reason) {
+    const ranked = [...game.players.values()].sort((a, b) => b.words.length - a.words.length);
+    const isTie = ranked.length > 1 && ranked[0].words.length === ranked[1].words.length;
+    game.endedByAdmin = true;
+    this.#finish(game, ranked.length && !isTie ? ranked[0].id : null, reason);
   }
 
   #log(game, event) {
@@ -401,6 +433,19 @@ export class GameStore {
   }
 }
 
+/** A game can be deleted 12 hours after it finished, or 12 hours after its end time if it never finished. */
+function isExpired(game, now) {
+  const endedAt = game.status === 'finished' ? game.lastActivity : game.endsAt;
+  return endedAt + GAME_TTL_MS < now;
+}
+
+/** Words each player stole over the whole game (kept even if they were caught later). */
+function stolenCounts(game) {
+  const counts = new Map();
+  for (const c of game.captures) counts.set(c.hunterId, (counts.get(c.hunterId) ?? 0) + c.words.length);
+  return counts;
+}
+
 // Rate-limit timestamps are deliberately not saved: they only matter for the next minute.
 export function serializeGame(game) {
   return {
@@ -411,6 +456,8 @@ export function serializeGame(game) {
 
 export function deserializeGame(data) {
   return {
+    // Games saved before end times existed get the default duration.
+    endsAt: data.createdAt + DEFAULT_GAME_DURATION_MS,
     ...data,
     players: new Map(data.players.map((p) => [p.id, { ...p, wrongCodes: [] }])),
   };

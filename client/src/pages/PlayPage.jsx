@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Avatar,
+  FinalStandings,
   FullPageMessage,
   Leaderboard,
   Logo,
@@ -9,6 +10,7 @@ import {
   MuteButton,
   QR,
   Scanner,
+  TimeLeft,
   useToast,
 } from '../components/ui.jsx';
 import { AVATAR_CHOICES, CAPTURE_CODE_LENGTH, MAX_NAME_LENGTH } from '../constants.js';
@@ -163,6 +165,7 @@ function PlayerGame({ id, token }) {
       <header className="topbar">
         <Logo size="sm" />
         <div className="topbar-right">
+          <TimeLeft state={state} />
           <span className="pill pill-code">#{id}</span>
           <MuteButton />
         </div>
@@ -436,9 +439,11 @@ function CaughtView({ me, capturer, state }) {
 function FinishedView({ me, state }) {
   const won = state.winner?.id === me.id;
   const myWords = state.players.find((p) => p.id === me.id)?.words ?? [];
+  const timeUp = state.events.some((e) => e.type === 'finish' && e.reason === 'time');
   return (
     <>
       <section className="card text-center pop-in">
+        {timeUp && <p className="pill pill-urgent">⏰ Time's up!</p>}
         {won ? (
           <>
             <div className="big-emoji wiggle">🏆</div>
@@ -459,8 +464,8 @@ function FinishedView({ me, state }) {
         )}
       </section>
       <section className="card">
-        <h3>📜 Final standings</h3>
-        <Leaderboard players={state.players} highlightId={me.id} showWords />
+        <h3>📜 Final standings: words stolen</h3>
+        <FinalStandings state={state} highlightId={me.id} />
       </section>
     </>
   );

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AdminLogin, FullPageMessage, Logo, MuteButton, StatusPill, useToast } from '../components/ui.jsx';
-import { formatDuration, plural, useAdminKey, useNow } from '../hooks.js';
+import { formatDuration, formatTimeLeft, plural, useAdminKey, useNow } from '../hooks.js';
 import { boardPath } from '../links.js';
 import { request } from '../socket.js';
 
@@ -109,6 +109,7 @@ function GamesList({ adminKey, onLogout }) {
                     {g.startedAt
                       ? `${g.status === 'finished' ? 'played' : 'running'} ${formatDuration((g.endedAt ?? now) - g.startedAt)}`
                       : `created ${new Date(g.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                    {g.status !== 'finished' && ` · ⏳ ends in ${formatTimeLeft(g.endsAt - now)}`}
                   </span>
                 </span>
                 <span className="game-actions">

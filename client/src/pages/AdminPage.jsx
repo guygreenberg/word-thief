@@ -12,6 +12,7 @@ import {
   MuteButton,
   QR,
   StatusPill,
+  TimeLeft,
   useToast,
 } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
@@ -83,6 +84,7 @@ function AdminDashboard({ id, adminKey, onLogout }) {
         <div className="topbar-right">
           <span className="pill pill-code">#{id}</span>
           <StatusPill status={state.status} />
+          <TimeLeft state={state} />
           <Elapsed state={state} />
           <MuteButton />
         </div>
@@ -135,6 +137,10 @@ function AdminDashboard({ id, adminKey, onLogout }) {
           🚪 Exit admin mode
         </button>
       </div>
+
+      {state.status !== 'finished' && (
+        <EndTimeEditor endsAt={state.endsAt} busy={busy} onSave={(endsAt) => run('admin:setEndsAt', { endsAt })} />
+      )}
 
       {state.status === 'lobby' ? (
         <div className="admin-grid">
@@ -196,6 +202,43 @@ function AdminDashboard({ id, adminKey, onLogout }) {
         </div>
       )}
     </div>
+  );
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+// <input type="datetime-local"> works in local time without a zone: "2026-12-04T20:30".
+const toLocalInput = (ms) => new Date(ms - new Date(ms).getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+
+function EndTimeEditor({ endsAt, busy, onSave }) {
+  const [value, setValue] = useState(() => toLocalInput(endsAt));
+  // Follow changes made elsewhere (another admin, or the quick buttons) once they're saved.
+  useEffect(() => setValue(toLocalInput(endsAt)), [endsAt]);
+  const picked = new Date(value).getTime();
+
+  return (
+    <section className="card end-time">
+      <h3>⏰ Game ends</h3>
+      <p className="muted small">The game ends automatically at this time; whoever holds the most words wins.</p>
+      <div className="end-time-row">
+        <input
+          type="datetime-local"
+          className="input"
+          value={value}
+          min={toLocalInput(Date.now())}
+          onChange={(e) => setValue(e.target.value)}
+          aria-label="Game end time"
+        />
+        <button type="button" className="btn btn-green" disabled={busy || !value || picked === endsAt} onClick={() => onSave(picked)}>
+          Save
+        </button>
+        <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => onSave(endsAt + DAY_MS)}>
+          +1 day
+        </button>
+        <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => onSave(endsAt + 7 * DAY_MS)}>
+          +1 week
+        </button>
+      </div>
+    </section>
   );
 }
 

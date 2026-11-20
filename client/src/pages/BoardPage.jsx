@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { request } from '../socket.js';
-import { Avatar, Elapsed, FullPageMessage, LocalhostWarning, Logo, MuteButton, QR, useToast } from '../components/ui.jsx';
+import { Avatar, Elapsed, FinalStandings, FullPageMessage, LocalhostWarning, Logo, MuteButton, QR, TimeLeft, useToast } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
-import { plural, rankPlayers, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
+import { plural, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
 import { joinUrl } from '../links.js';
 
 export default function BoardPage() {
@@ -38,6 +38,7 @@ export default function BoardPage() {
         <Logo size="md" />
         <div className="topbar-right">
           <span className="pill pill-code">#{id}</span>
+          <TimeLeft state={state} />
           <Elapsed state={state} />
           <MuteButton />
           <Link className="btn btn-sm btn-ghost" to={`/admin/${id}`} title="Admin mode (login required)">
@@ -158,39 +159,28 @@ function BoardGame({ state }) {
 
 function BoardWinner({ state }) {
   const winner = state.winner && state.players.find((p) => p.id === state.winner.id);
-  const ranked = rankPlayers(state.players);
+  const timeUp = state.events.some((e) => e.type === 'finish' && e.reason === 'time');
   return (
-    <div className="board-winner text-center">
-      {winner ? (
-        <>
-          <div className="winner-avatar">
-            <span className="crown big">👑</span>
-            <Avatar player={winner} size={160} />
-          </div>
-          <h1 className="shout">{winner.name} wins!</h1>
-          <p className="tagline">The ultimate Word Thief, holding {plural(winner.wordCount, 'word')} 🏆</p>
-          <div className="word-cloud">
-            {winner.words.map((w, i) => (
-              <span key={w} className="word-chip pop-in" style={{ animationDelay: `${Math.min(i * 0.05, 3)}s` }}>
-                {w}
-              </span>
-            ))}
-          </div>
-        </>
-      ) : (
-        <>
+    <div className="board-winner">
+      <div className="text-center">
+        {timeUp && <p className="tagline">⏰ Time's up!</p>}
+        {winner ? (
+          <>
+            <div className="winner-avatar">
+              <span className="crown big">👑</span>
+              <Avatar player={winner} size={120} />
+            </div>
+            <h1 className="shout">{winner.name} wins!</h1>
+            <p className="tagline">The ultimate Word Thief, holding {plural(winner.wordCount, 'word')} 🏆</p>
+          </>
+        ) : (
           <h1 className="shout">🤝 It's a tie!</h1>
-          <div className="podium">
-            {ranked.slice(0, 3).map((p) => (
-              <div key={p.id} className="card podium-item">
-                <Avatar player={p} size={72} />
-                <b>{p.name}</b>
-                <span>{plural(p.wordCount, 'word')}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+        )}
+      </div>
+      <section className="card standings-card">
+        <h2>📜 Final standings: words stolen</h2>
+        <FinalStandings state={state} />
+      </section>
     </div>
   );
 }
