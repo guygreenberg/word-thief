@@ -18,8 +18,10 @@ export function useGameWatch(gameId, adminKey) {
   const [state, setState] = useState(null);
   const [error, setError] = useState(null);
   const [errorCode, setErrorCode] = useState(null);
+  const [deleted, setDeleted] = useState(false);
   const id = gameId.toUpperCase();
 
+  useSocketEvent('gameDeleted', (e) => e.id === id && setDeleted(true));
   useSocketEvent(adminKey ? 'adminState' : 'state', (s) => s.id === id && setState(s));
   useEffect(
     () =>
@@ -37,7 +39,7 @@ export function useGameWatch(gameId, adminKey) {
       ),
     [id, adminKey],
   );
-  return { state, error, errorCode };
+  return { state, error, errorCode, deleted };
 }
 
 /** Admin session from logging in, shared by every game and remembered on this device. */

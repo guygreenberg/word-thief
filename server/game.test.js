@@ -316,3 +316,79 @@ describe('game end time', () => {
     assert.ok(!store.games.has(game.id));
   });
 });
+
+describe('removing a player', () => {
+  it('returns their word to the pool in the lobby', () => {
+    const { store, game, players } = setup();
+    const poolSize = game.wordPool.length;
+    store.removePlayer(game.id, players.Bob.id);
+    assert.equal(game.players.size, 2);
+    assert.equal(game.wordPool.length, poolSize + 1);
+    assert.throws(() => store.findPlayerByToken(game, players.Bob.token), /not a player/);
+  });
+
+  it('mid-game: their words leave with them, scores and names are kept, and undo history is cleared', () => {
+    const { store, game, players } = setup(['A', 'B', 'C', 'D']);
+    store.startGame(game.id);
+    store.capture(game.id, players.A.token, players.B.code);
+    store.capture(game.id, players.C.token, players.A.code);
+    store.removePlayer(game.id, players.C.id);
+
+    const state = store.publicState(game, { admin: true });
+    assert.deepEqual(state.players.map((p) => p.name).sort(), ['A', 'B', 'D']);
+    assert.equal(state.players.find((p) => p.name === 'A').stolenCount, 1);
+    assert.equal(state.players.find((p) => p.name === 'A').capturedBy, 'C');
+    assert.equal(state.events.find((e) => e.type === 'remove').target, 'C');
+    assert.throws(() => store.undoLastCapture(game.id), /Nothing to undo/);
+  });
+
+  it('ends the game when only one player is left in', () => {
+    const { store, game, players } = setup();
+    store.startGame(game.id);
+    store.capture(game.id, players.Alice.token, players.Bob.code);
+    store.removePlayer(game.id, players.Carol.id);
+    assert.equal(game.status, 'finished');
+    assert.equal(game.winnerId, players.Alice.id);
+    assert.equal(game.events.at(-1).reason, 'removed');
+  });
+});
+
+describe('deleting a game', () => {
+  it('removes it from the store', () => {
+    const { store, game } = setup();
+    store.deleteGame(game.id);
+    assert.throws(() => store.getGame(game.id), /not found/);
+    assert.deepEqual(store.listGames(), []);
+  });
+});
+
+describe('resuming an ended game', () => {
+  it('reopens a game ended early, re-allowing undo and extending a passed end time', () => {
+    let now = 1_000_000;
+    const store = new GameStore({ now: () => now });
+    const game = store.createGame();
+    const [a, b] = ['A', 'B', 'C'].map((n) => store.joinGame(game.id, n).player);
+    store.startGame(game.id);
+    store.capture(game.id, a.token, b.code);
+    now = game.endsAt;
+    store.expireDueGames();
+    assert.equal(game.status, 'finished');
+
+    store.resumeGame(game.id);
+    assert.equal(game.status, 'active');
+    assert.equal(game.winnerId, null);
+    assert.equal(game.endsAt, now + DEFAULT_GAME_DURATION_MS);
+    assert.deepEqual(store.expireDueGames(), []);
+    store.undoLastCapture(game.id);
+    assert.equal(b.status, 'active');
+  });
+
+  it('refuses when only one player is still in, or when the game has not ended', () => {
+    const { store, game, players } = setup();
+    assert.throws(() => store.resumeGame(game.id), /hasn't ended/);
+    store.startGame(game.id);
+    store.capture(game.id, players.Alice.token, players.Bob.code);
+    store.capture(game.id, players.Alice.token, players.Carol.code);
+    assert.throws(() => store.resumeGame(game.id), /Only one player/);
+  });
+});

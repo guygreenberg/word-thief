@@ -53,6 +53,17 @@ function GamesList({ adminKey, onLogout }) {
     }
   }
 
+  async function deleteGame(gameId) {
+    if (!window.confirm(`Delete game #${gameId}? This can't be undone and everyone in it will be disconnected.`)) return;
+    try {
+      await request('admin:deleteGame', { gameId, adminKey });
+      setGames((list) => list.filter((g) => g.id !== gameId));
+      toast({ emoji: '🗑️', text: `Game #${gameId} deleted` });
+    } catch (e) {
+      toast({ emoji: '😬', text: e.message, tone: 'error' });
+    }
+  }
+
   function logout() {
     request('admin:logout', { adminKey }).catch(() => {});
     onLogout();
@@ -119,6 +130,9 @@ function GamesList({ adminKey, onLogout }) {
                   <Link className="btn btn-sm btn-blue" to={boardPath(g.id)}>
                     📺 Game screen
                   </Link>
+                  <button type="button" className="btn btn-sm btn-red" onClick={() => deleteGame(g.id)} aria-label={`Delete game ${g.id}`}>
+                    🗑️ Delete
+                  </button>
                 </span>
               </li>
             ))}

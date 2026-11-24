@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { AdminLogin, Avatar, Elapsed, TimeLeft, FullPageMessage, Leaderboard, Logo, MuteButton, StatusPill, useToast } from '../components/ui.jsx';
+import { AdminLogin, Avatar, Elapsed, TimeLeft, FullPageMessage, GameDeleted, Leaderboard, Logo, MuteButton, StatusPill, useToast } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
 import { plural, rankPlayers, useAdminKey, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
 
@@ -13,7 +13,7 @@ export default function AdminBoardPage() {
 }
 
 function AdminBoard({ id, adminKey, onLogout }) {
-  const { state, error, errorCode } = useGameWatch(id, adminKey);
+  const { state, error, errorCode, deleted } = useGameWatch(id, adminKey);
   const toast = useToast();
 
   useEffect(() => {
@@ -30,6 +30,7 @@ function AdminBoard({ id, adminKey, onLogout }) {
     }
   });
 
+  if (deleted) return <GameDeleted />;
   if (error && !state) return <FullPageMessage emoji="🤷" title={error} />;
   if (!state) return <FullPageMessage emoji="⏳" title="Loading score board…" />;
 

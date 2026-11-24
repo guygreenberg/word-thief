@@ -144,7 +144,7 @@ export function StatusPill({ status }) {
 }
 
 /** Ranked by word count when `showCounts`; otherwise just who is in or out, alphabetically, revealing nothing. */
-export function Leaderboard({ players, highlightId, limit, showWords = false, columns = false, showCounts = true }) {
+export function Leaderboard({ players, highlightId, limit, showWords = false, columns = false, showCounts = true, onRemove }) {
   const ranked = showCounts
     ? rankPlayers(players)
     : [...players].sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'active' ? -1 : 1));
@@ -175,6 +175,11 @@ export function Leaderboard({ players, highlightId, limit, showWords = false, co
               {showWords && p.words?.length > 0 && <span className="lb-sub">{p.words.join(' · ')}</span>}
             </span>
             {!out && showCounts && <span className="lb-count">{plural(p.wordCount, 'word')}</span>}
+            {onRemove && (
+              <button type="button" className="chip-x" aria-label={`Remove ${p.name}`} title={`Remove ${p.name}`} onClick={() => onRemove(p)}>
+                ✕
+              </button>
+            )}
           </li>
         );
       })}
@@ -212,12 +217,17 @@ function EventText({ event: e }) {
       return <span>🦹 <b>{e.player}</b> stole {plural(e.count, 'word')} from <b>{e.target}</b></span>;
     case 'undo':
       return <span>↩️ Host undid <b>{e.player}</b>'s steal from <b>{e.target}</b></span>;
+    case 'remove':
+      return <span>🚪 Host removed <b>{e.target}</b></span>;
+    case 'resume':
+      return <span>▶️ Host resumed the game</span>;
     case 'deadline':
       return <span>⏰ Host set the end time to <b>{new Date(e.endsAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</b></span>;
     case 'finish':
       return (
         <span>
           {e.reason === 'time' ? "⏰ Time's up! " : ''}
+          {e.reason === 'removed' ? '🚪 Only one player left. ' : ''}
           {e.player ? <>🏆 <b>{e.player}</b> won!</> : '🏁 Game ended'}
         </span>
       );
@@ -359,6 +369,15 @@ export function FloatingEmojis() {
         </span>
       ))}
     </div>
+  );
+}
+
+export function GameDeleted() {
+  return (
+    <FullPageMessage emoji="🗑️" title="This game was deleted">
+      <p>The host deleted this game.</p>
+      <a className="btn btn-primary" href="/">Go home</a>
+    </FullPageMessage>
   );
 }
 

@@ -87,11 +87,28 @@ export function registerSocketHandlers(io, store, auth) {
       return {};
     });
 
-    handle('admin:kick', ({ gameId, adminKey, playerId }) => {
+    handle('admin:removePlayer', ({ gameId, adminKey, playerId }) => {
       auth.requireSession(adminKey);
-      const { game, player } = store.kickPlayer(gameId, playerId);
+      const { game, player } = store.removePlayer(gameId, playerId);
       io.to(playerRoom(game.id, player.id)).emit('kicked');
+      io.in(playerRoom(game.id, player.id)).socketsLeave([gameRoom(game.id), playerRoom(game.id, player.id)]);
       broadcast(game);
+      return {};
+    });
+
+    handle('admin:resume', ({ gameId, adminKey }) => {
+      auth.requireSession(adminKey);
+      broadcast(store.resumeGame(gameId));
+      return {};
+    });
+
+    handle('admin:deleteGame', ({ gameId, adminKey }) => {
+      auth.requireSession(adminKey);
+      const game = store.deleteGame(gameId);
+      // Tell everyone still looking at the game, then drop them from its rooms.
+      io.to(gameRoom(game.id)).emit('gameDeleted', { id: game.id });
+      io.in(gameRoom(game.id)).socketsLeave(gameRoom(game.id));
+      io.in(adminRoom(game.id)).socketsLeave(adminRoom(game.id));
       return {};
     });
 

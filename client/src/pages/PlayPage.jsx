@@ -4,6 +4,7 @@ import {
   Avatar,
   FinalStandings,
   FullPageMessage,
+  GameDeleted,
   Leaderboard,
   Logo,
   Modal,
@@ -38,6 +39,7 @@ function PlayerGame({ id, token }) {
   const [state, setState] = useState(null);
   const [error, setError] = useState(null);
   const [kicked, setKicked] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [stolen, setStolen] = useState(null);
@@ -70,6 +72,11 @@ function PlayerGame({ id, token }) {
 
   useSocketEvent('state', (s) => s.id === id && setState(s));
   useSocketEvent('me', (m) => setMe((prev) => (prev && prev.id === m.id ? m : prev)));
+  useSocketEvent('gameDeleted', (e) => {
+    if (e.id !== id) return;
+    storage.setPlayerToken(id, null);
+    setDeleted(true);
+  });
   useSocketEvent('kicked', () => {
     storage.setPlayerToken(id, null);
     setKicked(true);
@@ -99,6 +106,11 @@ function PlayerGame({ id, token }) {
       play('start');
       vibrate(300);
       toast({ emoji: '🚀', text: 'The game has started! Go make them talk!', tone: 'success' });
+    }
+    if (prev === 'finished' && next !== 'finished') {
+      play('start');
+      vibrate(300);
+      toast({ emoji: '▶️', text: 'The host resumed the game. Back to stealing!', tone: 'success' });
     }
     if (prev === 'active' && next === 'finished') {
       setShowQr(false);
@@ -131,6 +143,7 @@ function PlayerGame({ id, token }) {
     }
   }
 
+  if (deleted) return <GameDeleted />;
   if (kicked) {
     return (
       <FullPageMessage emoji="🚪" title="You were removed from the game">

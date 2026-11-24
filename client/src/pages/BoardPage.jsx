@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { request } from '../socket.js';
-import { Avatar, Elapsed, FinalStandings, FullPageMessage, LocalhostWarning, Logo, MuteButton, QR, TimeLeft, useToast } from '../components/ui.jsx';
+import { Avatar, Elapsed, FinalStandings, FullPageMessage, GameDeleted, LocalhostWarning, Logo, MuteButton, QR, TimeLeft, useToast } from '../components/ui.jsx';
 import { celebrate, play } from '../effects.js';
 import { plural, useChange, useGameWatch, useSocketEvent } from '../hooks.js';
 import { joinUrl } from '../links.js';
 
 export default function BoardPage() {
   const id = useParams().gameId.toUpperCase();
-  const { state, error } = useGameWatch(id);
+  const { state, error, deleted } = useGameWatch(id);
   const [flash, setFlash] = useState(null);
 
   useSocketEvent('joined', () => play('pop'));
@@ -29,6 +29,7 @@ export default function BoardPage() {
     }
   });
 
+  if (deleted) return <GameDeleted />;
   if (error && !state) return <FullPageMessage emoji="🤷" title={error} />;
   if (!state) return <FullPageMessage emoji="⏳" title="Loading board…" />;
 

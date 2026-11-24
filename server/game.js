@@ -181,6 +181,8 @@ export class GameStore {
       token: secret(),
       code,
       word: null,
+      // Words stolen over the whole game; kept when caught, so final standings credit every steal.
+      stolenTotal: 0,
       wrongCodes: [],
       name,
       avatar: pick(AVATARS),
@@ -229,15 +231,50 @@ export class GameStore {
     return { game, player };
   }
 
-  kickPlayer(gameId, playerId) {
+  /**
+   * Host removes a player at any stage. In the lobby their word goes back to the pool; once the game has
+   * started their words leave with them. Undo history is cleared because earlier steals may involve them.
+   */
+  removePlayer(gameId, playerId) {
     const game = this.getGame(gameId);
-    if (game.status !== 'lobby') throw new GameError('Players can only be removed before the game starts');
     const player = game.players.get(playerId);
     if (!player) throw new GameError('Player not found');
-    game.wordPool.push(...player.words);
+    if (game.status === 'lobby') game.wordPool.push(...player.words);
     game.players.delete(playerId);
-    this.#touch(game);
+    // Keep the name so "caught by …" labels and the event feed still read well.
+    game.formerNames = { ...game.formerNames, [player.id]: player.name };
+    if (game.status !== 'lobby') game.captures = [];
+    this.#log(game, { type: 'remove', target: player.id });
+
+    if (game.status === 'active') {
+      const remaining = [...game.players.values()].filter((p) => p.status === 'active');
+      if (remaining.length <= 1) this.#finish(game, remaining[0]?.id ?? null, 'removed');
+    }
     return { game, player };
+  }
+
+  deleteGame(gameId) {
+    const game = this.getGame(gameId);
+    this.games.delete(game.id);
+    this.#markDirty(game.id);
+    return game;
+  }
+
+  /** Host reopens an ended game. Pushes the end time out if it has already passed. */
+  resumeGame(gameId) {
+    const game = this.getGame(gameId);
+    if (game.status !== 'finished') throw new GameError("The game hasn't ended");
+    const stillIn = [...game.players.values()].filter((p) => p.status === 'active').length;
+    if (game.startedAt && stillIn < 2) {
+      throw new GameError('Only one player is still in, so there is nothing to resume. Undo a steal instead.');
+    }
+    game.status = game.startedAt ? 'active' : 'lobby';
+    game.endedAt = null;
+    game.winnerId = null;
+    game.endedByAdmin = false;
+    if (game.endsAt <= this.now()) game.endsAt = this.now() + DEFAULT_GAME_DURATION_MS;
+    this.#log(game, { type: 'resume' });
+    return game;
   }
 
   /** Started from the shared game screen, so no admin login is needed. */
@@ -273,6 +310,7 @@ export class GameStore {
 
     const stolen = target.words;
     hunter.words = [...hunter.words, ...stolen];
+    hunter.stolenTotal += stolen.length;
     target.words = [];
     target.status = 'out';
     target.capturedById = hunter.id;
@@ -294,6 +332,7 @@ export class GameStore {
     const target = game.players.get(last.targetId);
     // Captures are undone strictly in LIFO order, so the stolen words are always the hunter's last ones.
     hunter.words = hunter.words.slice(0, hunter.words.length - last.words.length);
+    hunter.stolenTotal -= last.words.length;
     target.words = last.words;
     target.status = 'active';
     target.capturedById = null;
@@ -347,11 +386,10 @@ export class GameStore {
    */
   publicState(game, { admin = false } = {}) {
     const players = [...game.players.values()];
-    const nameOf = (id) => game.players.get(id)?.name ?? null;
+    const nameOf = (id) => game.players.get(id)?.name ?? game.formerNames?.[id] ?? null;
     const winner = game.winnerId ? game.players.get(game.winnerId) : null;
     const finished = game.status === 'finished';
     const showCounts = admin || finished;
-    const stolen = showCounts ? stolenCounts(game) : null;
     return {
       id: game.id,
       status: game.status,
@@ -369,7 +407,7 @@ export class GameStore {
         color: p.color,
         status: p.status,
         wordCount: showCounts ? p.words.length : undefined,
-        stolenCount: showCounts ? (stolen.get(p.id) ?? 0) : undefined,
+        stolenCount: showCounts ? p.stolenTotal : undefined,
         capturedBy: nameOf(p.capturedById),
         joinedAt: p.joinedAt,
         eliminatedAt: p.eliminatedAt,
@@ -439,13 +477,6 @@ function isExpired(game, now) {
   return endedAt + GAME_TTL_MS < now;
 }
 
-/** Words each player stole over the whole game (kept even if they were caught later). */
-function stolenCounts(game) {
-  const counts = new Map();
-  for (const c of game.captures) counts.set(c.hunterId, (counts.get(c.hunterId) ?? 0) + c.words.length);
-  return counts;
-}
-
 // Rate-limit timestamps are deliberately not saved: they only matter for the next minute.
 export function serializeGame(game) {
   return {
@@ -459,6 +490,16 @@ export function deserializeGame(data) {
     // Games saved before end times existed get the default duration.
     endsAt: data.createdAt + DEFAULT_GAME_DURATION_MS,
     ...data,
-    players: new Map(data.players.map((p) => [p.id, { ...p, wrongCodes: [] }])),
+    players: new Map(
+      data.players.map((p) => [
+        p.id,
+        {
+          // Games saved before stolen totals existed: rebuild them from the steal history.
+          stolenTotal: data.captures.filter((c) => c.hunterId === p.id).reduce((n, c) => n + c.words.length, 0),
+          ...p,
+          wrongCodes: [],
+        },
+      ]),
+    ),
   };
 }

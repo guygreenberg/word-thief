@@ -30,8 +30,15 @@ export default function AdminPage() {
 function AdminDashboard({ id, adminKey, onLogout }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const { state, error, errorCode } = useGameWatch(id, adminKey);
+  const { state, error, errorCode, deleted } = useGameWatch(id, adminKey);
   const [busy, setBusy] = useState(false);
+
+  // Deleted here or by another admin: go back to the games list.
+  useEffect(() => {
+    if (!deleted) return;
+    toast({ emoji: '🗑️', text: `Game #${id} was deleted` });
+    navigate('/admin');
+  }, [deleted, id, navigate, toast]);
 
   // A stale key (e.g. after a server restart) sends the host back to the login form.
   useEffect(() => {
@@ -121,10 +128,28 @@ function AdminDashboard({ id, adminKey, onLogout }) {
           </button>
         )}
         {state.status === 'finished' && (
+          <button
+            type="button"
+            className="btn btn-green"
+            disabled={busy}
+            onClick={() => run('admin:resume', {}, 'Resume this game? Players who are still in can keep stealing.')}
+          >
+            ▶️ Resume game
+          </button>
+        )}
+        {state.status === 'finished' && (
           <button type="button" className="btn btn-primary" onClick={() => navigate('/')}>
             ✨ New game
           </button>
         )}
+        <button
+          type="button"
+          className="btn btn-red"
+          disabled={busy}
+          onClick={() => run('admin:deleteGame', {}, `Delete game #${id}? This can't be undone and everyone in it will be disconnected.`)}
+        >
+          🗑️ Delete game
+        </button>
         <button
           type="button"
           className="btn btn-ghost"
@@ -174,7 +199,7 @@ function AdminDashboard({ id, adminKey, onLogout }) {
                       type="button"
                       className="chip-x"
                       aria-label={`Remove ${p.name}`}
-                      onClick={() => run('admin:kick', { playerId: p.id }, `Remove ${p.name} from the game?`)}
+                      onClick={() => run('admin:removePlayer', { playerId: p.id }, `Remove ${p.name} from the game?`)}
                     >
                       ✕
                     </button>
@@ -193,7 +218,17 @@ function AdminDashboard({ id, adminKey, onLogout }) {
               <Stat emoji="👻" value={out} label="caught" />
               <Stat emoji="🔤" value={state.players.length} label="words" />
             </div>
-            <Leaderboard players={state.players} showWords={state.status === 'finished'} />
+            <Leaderboard
+              players={state.players}
+              showWords={state.status === 'finished'}
+              onRemove={(p) =>
+                run(
+                  'admin:removePlayer',
+                  { playerId: p.id },
+                  `Remove ${p.name} from the game? ${p.wordCount ? `Their ${plural(p.wordCount, 'word')} ${p.wordCount === 1 ? 'leaves' : 'leave'} with them, and s` : 'S'}teals made so far can no longer be undone.`,
+                )
+              }
+            />
           </section>
           <section className="card">
             <h2>Live feed 📣</h2>

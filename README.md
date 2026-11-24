@@ -28,7 +28,15 @@ They're out. The last thief standing, holding every word in the game, wins.
    stolen over the whole game (even if they were caught later), sorted high to low, with medals for the
    top three scores.
 
-The host can **undo the last steal** (for disputes or mis-scans) and remove players before the game starts.
+In admin mode the host can also:
+
+- **Undo the last steal** (for disputes or mis-scans).
+- **Remove a player** at any stage. In the lobby their word returns to the pool; once the game has
+  started their words leave with them, and the undo history is cleared (stolen-word scores are kept).
+  If only one player is left in, they win.
+- **Resume an ended game** if at least two players are still in. If the end time has already passed it
+  is pushed out by two weeks.
+- **Delete a game** from the games list or its dashboard. Everyone still in it is told and disconnected.
 
 Names are unique within a game (case-insensitive). A player who closes the browser or switches phones
 scans the game QR again and types their original name to get back in, even after the game started.
